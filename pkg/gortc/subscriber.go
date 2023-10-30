@@ -17,6 +17,7 @@ type Subscriber struct {
 	OnOffer                    func(offer *webrtc.SessionDescription)
 	OnIceCandidate             func(*webrtc.ICECandidateInit, int)
 	OnICEConnectionStateChange func(webrtc.ICEConnectionState)
+	onDownTrack                func(track forwarder.IDownTrack)
 	id                         string
 	logger                     *logrus.Entry
 	pc                         *webrtc.PeerConnection
@@ -30,7 +31,7 @@ type Subscriber struct {
 	cancel                     context.CancelFunc
 }
 
-func NewSubscriber(ctx context.Context, id string, group forwarder.IGroup, c WebRTCTransportConfig, logger *logrus.Entry) (*Subscriber, error) {
+func NewSubscriber(ctx context.Context, id string, c WebRTCTransportConfig, logger *logrus.Entry) (*Subscriber, error) {
 	me, err := getSubscriberMediaEngine()
 	if err != nil {
 		logger.WithError(err).Error(err, "NewPeer error, getSubscriberMediaEngine")
@@ -171,6 +172,10 @@ func (s *Subscriber) SetRemoteDescription(sdp webrtc.SessionDescription) error {
 
 func (s *Subscriber) Logger() *logrus.Entry {
 	return s.logger
+}
+
+func (s *Subscriber) OnDownTrack(fn func(track forwarder.IDownTrack)) {
+	s.onDownTrack = fn
 }
 
 func (s *Subscriber) Close() {

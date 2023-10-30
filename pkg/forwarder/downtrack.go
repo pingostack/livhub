@@ -57,7 +57,7 @@ func (d *DefaultDownTrack) SwitchSpatialLayerDone(layer int) {
 
 }
 
-func (d *DefaultDownTrack) WriteFrame(frame *FramePacket) error {
+func (d *DefaultDownTrack) WriteFrame(frame *Frame) error {
 	return nil
 }
 

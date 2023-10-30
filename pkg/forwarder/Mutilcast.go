@@ -19,24 +19,27 @@ type Multicast struct {
 	closed         utils.AtomicBool
 	mutex          sync.Mutex
 	peerID         string
-	trackID        string
-	streamID       string
-	kind           FrameKind
+	pt             PacketType
+	format          FrameFormat
 	isSimulcast    bool
 	closeOnce      sync.Once
 	logger         *logrus.Entry
+	filter         IFilter
 	onCloseHandler func()
 }
 
-func NewMulticast(peerID string, trackID string, streamID string, kind FrameKind, isSimulcast bool) *Multicast {
+func NewMulticast(peerID string, pt PacketType, format FrameFormat, isSimulcast bool) *Multicast {
 	return &Multicast{
 		peerID:      peerID,
-		trackID:     trackID,
-		streamID:    streamID,
-		kind:        kind,
+		pt:          pt,
+		format:       format,
 		isSimulcast: isSimulcast,
-		logger:      logrus.WithFields(logrus.Fields{"package": "forwarder", "role": "multicast", "peer_id": peerID, "track_id": trackID, "stream_id": streamID}),
+		logger:      logrus.WithFields(logrus.Fields{"package": "forwarder", "role": "multicast", "peer_id": peerID}),
 	}
+}
+
+func (m *Multicast) AddFilter(filter IFilter) {
+	m.filter = filter
 }
 
 func (m *Multicast) AddUpTrack(src IFrameSource, layer int, bestQualityFirst bool) {
@@ -242,4 +245,12 @@ func (m *Multicast) SwitchDownTrack(track IDownTrack, layer int) error {
 	}
 
 	return errors.New("layer not available")
+}
+
+func (m *Multicast) FrameFormat() FrameFormat {
+	return m.format
+}
+
+func (m *Multicast) PacketType() PacketType {
+	return m.pt
 }

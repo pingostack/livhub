@@ -9,7 +9,7 @@ import (
 
 type IGroup interface {
 	ID() string
-	Publish(upTrack IUpTrack)
+	Publish(upTrack IFrameSource, layer int8)
 	AddPeer(peer IPeer)
 	GetPeer(peerID string) IPeer
 	RemovePeer(peer IPeer)

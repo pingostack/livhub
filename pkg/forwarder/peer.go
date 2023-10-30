@@ -13,9 +13,8 @@ import (
 type IPublisher interface {
 	//	OnConnect(f func(data string, publisher IPublisher))
 	Close()
-	GetRouter() IRouter
 	// Marshal() string
-	// OnRemoteTrack(f func())
+	OnUpTrack(f func(track IUpTrack))
 	// ITrack
 	// ITransport
 }
@@ -26,7 +25,7 @@ type ISubscriber interface {
 	NegotiateTracks()
 	OnNegotiateTracks(f func())
 	// Marshal() string
-	// OnLocalTrack(f func())
+	OnDownTrack(f func(track IDownTrack))
 	// ITrack
 	// ITransport
 }
@@ -44,17 +43,17 @@ type IGroupProvider interface {
 }
 
 type IPublisherProvider interface {
-	NewPublisher(ctx context.Context, id string, group IGroup, logger *logrus.Entry) (IPublisher, error)
+	NewPublisher(ctx context.Context, id string, logger *logrus.Entry) (IPublisher, error)
 }
 
 type ISubscriberProvider interface {
-	NewSubscriber(ctx context.Context, id string, group IGroup, logger *logrus.Entry) (ISubscriber, error)
+	NewSubscriber(ctx context.Context, id string, logger *logrus.Entry) (ISubscriber, error)
 }
 
 type JoinConfig struct {
-	NoPublish        bool
-	NoSubscribe      bool
-	NoAutioSubscribe bool
+	NoPublish       bool
+	NoSubscribe     bool
+	NoAutoSubscribe bool
 }
 
 type Peer struct {
@@ -73,6 +72,7 @@ type Peer struct {
 	OnLocalTrack       func()
 	ctx                context.Context
 	cancel             context.CancelFunc
+	router             IRouter
 }
 
 func NewPeer(ctx context.Context, id string, logger *logrus.Entry,
@@ -88,7 +88,7 @@ func NewPeer(ctx context.Context, id string, logger *logrus.Entry,
 		publisherProvider:  publisherProvider,
 		subscriberProvider: subscriberProvider,
 		groupProvider:      groupProvider,
-		logger:             logger.WithFields(logrus.Fields{"package": "forwarder", "role": "peer", "peer_id": id}),
+		logger:             logger.WithFields(logrus.Fields{"package": "forwarder", "peer_id": id}),
 		id:                 id,
 	}
 
@@ -116,23 +116,35 @@ func (p *Peer) Join(groupId string, config JoinConfig) error {
 	}
 
 	if p.publisherProvider != nil && !config.NoPublish {
-		publisher, err := p.publisherProvider.NewPublisher(p.ctx, p.id, p.group, p.Logger().WithField("target", "publisher"))
-
+		publisher, err := p.publisherProvider.NewPublisher(p.ctx, p.id, p.Logger())
 		if err != nil {
 			p.Logger().WithError(err).Error("failed to create publisher")
 			return err
 		}
 
+		publisher.OnUpTrack(func(track IUpTrack) {
+			p.Logger().WithField(
+				"track_id", track.TrackID(),
+			).Info("up track received")
+			p.router = NewRouter(p.id)
+			p.router.AddUpTrack(track)
+		})
+
 		p.publisher = publisher
 	}
 
 	if p.subscriberProvider != nil && !config.NoSubscribe {
-		subscriber, err := p.subscriberProvider.NewSubscriber(p.ctx, p.id, p.group, p.Logger().WithField("target", "subscriber"))
-
+		subscriber, err := p.subscriberProvider.NewSubscriber(p.ctx, p.id, p.Logger())
 		if err != nil {
 			p.Logger().WithError(err).Error("failed to create subscriber")
 			return err
 		}
+
+		p.subscriber.OnDownTrack(func(track IDownTrack) {
+			p.Logger().WithField(
+				"track_id", track.TrackID(),
+			).Info("down track received")
+		})
 
 		p.subscriber = subscriber
 	}

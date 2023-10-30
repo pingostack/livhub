@@ -3,6 +3,8 @@ package gortc
 import (
 	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -31,7 +33,10 @@ type packetMeta struct {
 	// Spatial layer of packet
 	layer uint8
 	// Information that differs depending the codec
-	misc uint32
+	misc              uint32
+	ssrc              uint32
+	payloadType       uint8
+	temporalSupported bool
 }
 
 func (p *packetMeta) setVP8PayloadMeta(tlz0Idx uint8, picID uint16) {
@@ -51,6 +56,7 @@ type sequencer struct {
 	step      int
 	headSN    uint16
 	startTime int64
+	logger    *logrus.Entry
 }
 
 func newSequencer(maxTrack int) *sequencer {
@@ -84,7 +90,7 @@ func (n *sequencer) push(sn, offSn uint16, timeStamp uint32, layer uint8, head b
 		step = n.step - int(n.headSN-offSn)
 		if step < 0 {
 			if step*-1 >= n.max {
-				Logger.V(0).Info("Old packet received, can not be sequenced", "head", sn, "received", offSn)
+				n.logger.Infof("Old packet received, can not be sequenced head %d received %d", sn, offSn)
 				return nil
 			}
 			step = n.max + step

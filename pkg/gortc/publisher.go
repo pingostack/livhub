@@ -16,23 +16,21 @@ import (
 type Publisher struct {
 	OnIceCandidate                    func(*webrtc.ICECandidateInit, int)
 	onICEConnectionStateChangeHandler atomic.Value
-
-	peerId     string
-	logger     *logrus.Entry
-	pc         *webrtc.PeerConnection
-	cfg        *WebRTCTransportConfig
-	candidates []webrtc.ICECandidateInit
-	closeOnce  sync.Once
-	factory    *buffer.Factory
-	ctx        context.Context
-	cancel     context.CancelFunc
-	rtcpCh     chan []rtcp.Packet
-	router     forwarder.IRouter
-	group      forwarder.IGroup
-	upTracks   map[string]*UpTrack
+	onUpTrack                         func(track forwarder.IFrameSource, layer int8)
+	peerId                            string
+	logger                            *logrus.Entry
+	pc                                *webrtc.PeerConnection
+	cfg                               *WebRTCTransportConfig
+	candidates                        []webrtc.ICECandidateInit
+	closeOnce                         sync.Once
+	factory                           *buffer.Factory
+	ctx                               context.Context
+	cancel                            context.CancelFunc
+	rtcpCh                            chan []rtcp.Packet
+	upTracks                          map[string]*UpTrack
 }
 
-func NewPublisher(ctx context.Context, id string, group forwarder.IGroup, cfg WebRTCTransportConfig, logger *logrus.Entry) (*Publisher, error) {
+func NewPublisher(ctx context.Context, id string, cfg WebRTCTransportConfig, logger *logrus.Entry) (*Publisher, error) {
 	me, err := getPublisherMediaEngine()
 	if err != nil {
 		logger.WithError(err).Error("NewPublisher error, getPublisherMediaEngine")
@@ -56,8 +54,6 @@ func NewPublisher(ctx context.Context, id string, group forwarder.IGroup, cfg We
 		pc:      pc,
 		cfg:     &cfg,
 		factory: factory,
-		group:   group,
-		router:  forwarder.NewRouter(id, group),
 	}
 
 	publisher.ctx, publisher.cancel = context.WithCancel(ctx)
@@ -104,8 +100,11 @@ func NewPublisher(ctx context.Context, id string, group forwarder.IGroup, cfg We
 			return
 		}
 
-		upTrack := NewUpTrack(buff, track, receiver, uint64(publisher.cfg.MaxBitRate), publisher.logger)
-		publisher.router.AddUpTrack(upTrack)
+		up := NewUpTrack(buff, track, receiver, uint64(publisher.cfg.MaxBitRate), publisher.logger)
+		up.SetRTCPCh(publisher.rtcpCh)
+		if publisher.onUpTrack != nil {
+			publisher.onUpTrack(up, up.Layer())
+		}
 	})
 
 	return publisher, nil
@@ -162,25 +161,20 @@ func (p *Publisher) Logger() *logrus.Entry {
 	return p.logger
 }
 
-func (p *Publisher) SetRTCPWriter(fn func(packet []rtcp.Packet) error) {
-	go func() {
-		for {
-			select {
-			case pkts := <-p.rtcpCh:
-				if err := fn(pkts); err != nil {
-					p.Logger().WithError(err).Error("rtcp write err")
-				}
-			case <-p.ctx.Done():
-				return
-			}
+func (p *Publisher) sendRTCPLoop() {
+	for {
+		select {
+		case pkts := <-p.rtcpCh:
+			p.pc.WriteRTCP(pkts)
+		case <-p.ctx.Done():
+			return
 		}
-	}()
+	}
 }
 
 // IPublisher impl begin
-
-func (p *Publisher) GetRouter() forwarder.IRouter {
-	return p.router
+func (p *Publisher) OnUpTrack(fn func(track forwarder.IFrameSource, layer int8)) {
+	p.onUpTrack = fn
 }
 
 func (p *Publisher) Close() {

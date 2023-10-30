@@ -3,6 +3,7 @@ package gortc
 import (
 	"context"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/let-light/gomodule"
@@ -17,6 +18,13 @@ const (
 	RolePublisher  = 0
 	RoleSubscriber = 1
 )
+
+var rtpPacketPool = &sync.Pool{
+	New: func() interface{} {
+		b := make([]byte, 1500)
+		return &b
+	},
+}
 
 type WebRTC struct {
 	gomodule.DefaultModule
@@ -35,12 +43,12 @@ func WebRTCModule() *WebRTC {
 	return webrtcModule
 }
 
-func (rtc *WebRTC) NewPublisher(ctx context.Context, id string, group forwarder.IGroup, logger *logrus.Entry) (forwarder.IPublisher, error) {
-	return NewPublisher(ctx, id, group, rtc.w, logger)
+func (rtc *WebRTC) NewPublisher(ctx context.Context, id string, logger *logrus.Entry) (forwarder.IPublisher, error) {
+	return NewPublisher(ctx, id, rtc.w, logger)
 }
 
-func (rtc *WebRTC) NewSubscriber(ctx context.Context, id string, group forwarder.IGroup, logger *logrus.Entry) (forwarder.ISubscriber, error) {
-	return NewSubscriber(ctx, id, group, rtc.w, logger)
+func (rtc *WebRTC) NewSubscriber(ctx context.Context, id string, logger *logrus.Entry) (forwarder.ISubscriber, error) {
+	return NewSubscriber(ctx, id, rtc.w, logger)
 }
 
 func (rtc *WebRTC) InitModule(_ context.Context, _ *gomodule.Manager) (interface{}, error) {

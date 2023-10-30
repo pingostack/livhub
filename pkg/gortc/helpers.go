@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/let-light/neon/pkg/forwarder"
 	"github.com/pion/ion-sfu/pkg/buffer"
 	"github.com/pion/webrtc/v3"
 )
@@ -14,19 +15,7 @@ var (
 	ntpEpoch = time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC)
 )
 
-type utils.AtomicBool int32
 type ntpTime uint64
-
-func (a *utils.AtomicBool) set(value bool) (swapped bool) {
-	if value {
-		return atomic.SwapInt32((*int32)(a), 1) == 0
-	}
-	return atomic.SwapInt32((*int32)(a), 0) == 1
-}
-
-func (a *utils.AtomicBool) get() bool {
-	return atomic.LoadInt32((*int32)(a)) != 0
-}
 
 // setVp8TemporalLayer is a helper to detect and modify accordingly the vp8 payload to reflect
 // temporal changes in the SFU.
@@ -139,4 +128,51 @@ func toNtpTime(t time.Time) ntpTime {
 		frac++
 	}
 	return ntpTime(sec<<32 | frac)
+}
+
+func convLayer(rid string) int8 {
+	if rid == fullResolution {
+		return 0
+	} else if rid == halfResolution {
+		return 1
+	} else if rid == quarterResolution {
+		return 2
+	} else {
+		return -1
+	}
+}
+
+func convFormart(mime string) forwarder.FrameFormat {
+	lowerS := strings.ToLower(mime)
+	if strings.Contains(lowerS, "vp8") {
+		return forwarder.FrameFormatVP8
+	} else if strings.Contains(lowerS, "vp9") {
+		return forwarder.FrameFormatVP9
+	} else if strings.Contains(lowerS, "h264") {
+		return forwarder.FrameFormatH264
+	} else if strings.Contains(lowerS, "h265") {
+		return forwarder.FrameFormatH265
+	} else if strings.Contains(lowerS, "vp8svc") {
+		return forwarder.FrameFormatVP8SVC
+	} else if strings.Contains(lowerS, "vp9svc") {
+		return forwarder.FrameFormatVP9SVC
+	} else if strings.Contains(lowerS, "h264svc") {
+		return forwarder.FrameFormatH264SVC
+	} else if strings.Contains(lowerS, "h265svc") {
+		return forwarder.FrameFormatH265SVC
+	} else if strings.Contains(lowerS, "av1") {
+		return forwarder.FrameFormatAV1
+	} else if strings.Contains(lowerS, "opus") {
+		return forwarder.FrameFormatOpus
+	} else if strings.Contains(lowerS, "g722") {
+		return forwarder.FrameFormatG722
+	} else if strings.Contains(lowerS, "pcmu") {
+		return forwarder.FrameFormatPCMU
+	} else if strings.Contains(lowerS, "pcma") {
+		return forwarder.FrameFormatPCMA
+	} else if strings.Contains(lowerS, "aac") {
+		return forwarder.FrameFormatAAC
+	} else {
+		return forwarder.FrameFormatUnknown
+	}
 }

@@ -1,6 +1,6 @@
 package forwarder
 
-type FrameKind int
+type FrameKind uint8
 
 const (
 	FrameKindVideo FrameKind = 1
@@ -8,7 +8,7 @@ const (
 	FrameKindData            = 4
 )
 
-type PacketType int16
+type PacketType uint8
 
 const (
 	PacketTypeRtp PacketType = iota + 1
@@ -17,81 +17,139 @@ const (
 	PacketTypeFLV
 )
 
-type CodecType int16
-
-const (
-	CodecTypeVP8 CodecType = iota + 1
-	CodecTypeVP9
-	CodecTypeH264
-	CodecTypeVP8SVC
-	CodecTypeVP9SVC
-	CodecTypeH264SVC
-	CodecTypeH265
-	CodecTypeAV1
-	CodecTypeAV1SVC
-	CodecTypeOpus
-	CodecTypeG722
-	CodecTypePCMU
-	CodecTypePCMA
-	CodecTypeAAC
-)
-
-type FramePacket struct {
-	Kind     FrameKind
-	PT       PacketType
-	Codec    CodecType
-	Layer    int8
-	KeyFrame bool
-	Payload  []byte
-}
-
-type IFrameSource interface {
-	RequestKeyFrame() error
-	ReadFrame() (*FramePacket, error)
-	GetFrameKind() FrameKind
-	GetPacketType() PacketType
-	GetCodecType() CodecType
-	Close()
-}
-
-type IFrameDestination interface {
-	WriteFrame(frame *FramePacket) error
-	Close()
-}
-
-type FrameSource struct {
-	kind  FrameKind
-	pt    PacketType
-	codec CodecType
-}
-
-func NewDefaultSource(kind FrameKind, pt PacketType, codec CodecType) IFrameSource {
-	return &FrameSource{
-		kind:  kind,
-		pt:    pt,
-		codec: codec,
+func (pt PacketType) String() string {
+	switch pt {
+	case PacketTypeRtp:
+		return "rtp"
+	case PacketTypeRtcp:
+		return "rtcp"
+	case PacketTypeRtmp:
+		return "rtmp"
+	case PacketTypeFLV:
+		return "flv"
+	default:
+		return "unknown"
 	}
 }
 
-func (fs *FrameSource) RequestKeyFrame() error {
-	return nil
+type FrameFormat uint8
+
+const (
+	FrameFormatUnknown FrameFormat = iota
+	FrameFormatVP8
+	FrameFormatVP9
+	FrameFormatH264
+	FrameFormatH265
+	FrameFormatVP8SVC
+	FrameFormatVP9SVC
+	FrameFormatH264SVC
+	FrameFormatH265SVC
+	FrameFormatAV1
+	FrameFormatOpus
+	FrameFormatG722
+	FrameFormatPCMU
+	FrameFormatPCMA
+	FrameFormatAAC
+)
+
+func (ct FrameFormat) String() string {
+	switch ct {
+	case FrameFormatVP8:
+		return "vp8"
+	case FrameFormatVP9:
+		return "vp9"
+	case FrameFormatH264:
+		return "h264"
+	case FrameFormatH265:
+		return "h265"
+	case FrameFormatVP8SVC:
+		return "vp8svc"
+	case FrameFormatVP9SVC:
+		return "vp9svc"
+	case FrameFormatH264SVC:
+		return "h264svc"
+	case FrameFormatH265SVC:
+		return "h265svc"
+	case FrameFormatAV1:
+		return "av1"
+	case FrameFormatOpus:
+		return "opus"
+	case FrameFormatG722:
+		return "g722"
+	case FrameFormatPCMU:
+		return "pcmu"
+	case FrameFormatPCMA:
+		return "pcma"
+	case FrameFormatAAC:
+		return "aac"
+	default:
+		return "unknown"
+	}
 }
 
-func (fs *FrameSource) ReadFrame() (*FramePacket, error) {
-	return nil, nil
+type FeedbackType uint16
+
+const (
+	FeedbackTypeNack FeedbackType = iota + 1
+	FeedbackTypePLI
+)
+
+type FeedbackMsg struct {
+	Type FeedbackType
+	Data interface{}
 }
 
-func (fs *FrameSource) GetCodecType() CodecType {
-	return fs.codec
+type VideoRotation int
+
+const (
+	VIDEO_ROTATION_0     VideoRotation = 0
+	VIDEO_ROTATION_90                  = 90
+	VIDEO_ROTATION_180                 = 180
+	VIDEO_ROTATION_270                 = 270
+	VIDEO_ROTATION_UNSET               = 360
+)
+
+type VideoFrameSpecificInfo struct {
+	Width      uint16
+	Height     uint16
+	IsKeyFrame bool
+	Rotation   VideoRotation
+	Layer      uint8
 }
 
-func (fs *FrameSource) GetFrameKind() FrameKind {
-	return fs.kind
+type AudioFrameSpecificInfo struct {
+	NbSamples  uint32
+	SampleRate uint32
+	Channels   uint8
 }
 
-func (fs *FrameSource) GetPacketType() PacketType {
-	return fs.pt
+type Frame struct {
+	PT        PacketType
+	Format    FrameFormat
+	Layer     int8
+	Timestamp uint64
+	VFSI      *VideoFrameSpecificInfo
+	AFSI      *AudioFrameSpecificInfo
+	Payload   interface{}
 }
 
-func (fs *FrameSource) Close() {
+type IFrameSource interface {
+	WriteFeedback(fb *FeedbackMsg)
+	AddDestination(dest IFrameDestination)
+	RemoveDestination(dest IFrameDestination)
+	CleanDestination()
+	DeliverFrame(frame *Frame)
+	FrameFormat() FrameFormat
+	PacketType() PacketType
+	GetFrameDestination(id string) IFrameDestination
+}
+
+type IFrameDestination interface {
+	WriteFrame(frame *Frame) error
+	SetFrameSource(source IFrameSource)
+	OnSrouceChanged(fn func())
+	UnsetFrameSource()
+	DeliverFeedback(fb *FeedbackMsg)
+	FrameFormat() FrameFormat
+	PacketType() PacketType
 }
