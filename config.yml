@@ -13,10 +13,28 @@ logger: {
   filePattern: '%Y%m%d',
 }
 
-sfu: {
-  listenAddr: ":7001",
-  Cert: "",
-  Key: "",
+whip: {
+  http: {
+    httpAddr: ":7001",
+    cert: "",
+    key: "",
+    allowOrigin: ["*"],
+    headers: {
+      WebRTC: Whip,
+    }
+  }
+}
+
+pms: {
+  http: {
+    httpAddr: ":7002",
+    cert: "",
+    key: "",
+    allowOrigin: ["*"],
+    headers: {
+      WebRTC: pms,
+    }
+  }
 }
 
 webrtc: {
