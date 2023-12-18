@@ -14,14 +14,14 @@ const (
 	defaultEventEmitterLength = 10
 )
 
-type ProducerParams struct {
+type RemoteStreamParams struct {
 	AllowdCodecs []config.CodecConfig
 	Ctx          context.Context
 	Logger       logger.Logger
 	PreferTCP    bool
 }
 
-type ConsumerParams struct {
+type LocalStreamParams struct {
 	AllowdCodecs []config.CodecConfig
 	Ctx          context.Context
 	Logger       logger.Logger
@@ -29,8 +29,8 @@ type ConsumerParams struct {
 }
 
 type Factory interface {
-	NewProducer(params ProducerParams) (*Producer, error)
-	NewConsumer(params ConsumerParams) (*Consumer, error)
+	NewRemoteStream(params RemoteStreamParams) (*RemoteStream, error)
+	NewLocalStream(params LocalStreamParams) (*LocalStream, error)
 }
 
 type FactoryImpl struct {
@@ -57,7 +57,7 @@ func NewTransportFactory(settings config.Settings) Factory {
 	return f
 }
 
-func (f *FactoryImpl) NewProducer(params ProducerParams) (*Producer, error) {
+func (f *FactoryImpl) NewRemoteStream(params RemoteStreamParams) (*RemoteStream, error) {
 	em := eventemitter.NewEventEmitter(params.Ctx, defaultEventEmitterLength, params.Logger)
 
 	transport, err := transport.NewTransport(transport.WithWebRTCConfig(f.webrtcConfig),
@@ -72,15 +72,15 @@ func (f *FactoryImpl) NewProducer(params ProducerParams) (*Producer, error) {
 
 	transport.SetPreferTCP(params.PreferTCP)
 
-	p, err := NewProducer(transport)
+	p, err := NewRemoteStream(transport)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create producer")
+		return nil, errors.Wrap(err, "failed to create remote stream")
 	}
 
 	return p, nil
 }
 
-func (f *FactoryImpl) NewConsumer(params ConsumerParams) (*Consumer, error) {
+func (f *FactoryImpl) NewLocalStream(params LocalStreamParams) (*LocalStream, error) {
 	em := eventemitter.NewEventEmitter(params.Ctx, defaultEventEmitterLength, params.Logger)
 
 	transport, err := transport.NewTransport(transport.WithWebRTCConfig(f.webrtcConfig),
@@ -95,9 +95,9 @@ func (f *FactoryImpl) NewConsumer(params ConsumerParams) (*Consumer, error) {
 
 	transport.SetPreferTCP(params.PreferTCP)
 
-	c, err := NewConsumer(transport)
+	c, err := NewLocalStream(transport)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create consumer")
+		return nil, errors.Wrap(err, "failed to create local stream")
 	}
 
 	return c, nil

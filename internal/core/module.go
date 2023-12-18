@@ -4,15 +4,20 @@ import (
 	"context"
 
 	"github.com/let-light/gomodule"
-	"github.com/pingostack/neon/internal/httpserv"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
 var coreModule *core
 
+type NamespaceInfo struct {
+	Name   string   `json:"name" mapstructure:"name"`
+	Domain []string `json:"domain" mapstructure:"domain"`
+}
+
 type CoreSettings struct {
-	httpserv.HttpParams `json:"http" mapstructure:"http"`
+	//httpserv.HttpParams `json:"http" mapstructure:"http"`
+	Namespaces []NamespaceInfo `json:"namespaces" mapstructure:"namespaces"`
 }
 
 type core struct {
@@ -50,9 +55,6 @@ func (core *core) ConfigChanged() {
 }
 
 func (core *core) ModuleRun() {
-	core.close()
-}
-
-func (core *core) close() {
-	core.logger.Info("core closing")
+	AddPublishFilter(Serv())
+	AddPlayFilter(Serv())
 }
