@@ -11,8 +11,8 @@ import (
 var coreModule *core
 
 type NamespaceInfo struct {
-	Name   string   `json:"name" mapstructure:"name"`
-	Domain []string `json:"domain" mapstructure:"domain"`
+	Name    string   `json:"name" mapstructure:"name"`
+	Domains []string `json:"domain" mapstructure:"domain"`
 }
 
 type CoreSettings struct {
@@ -55,6 +55,4 @@ func (core *core) ConfigChanged() {
 }
 
 func (core *core) ModuleRun() {
-	AddPublishFilter(Serv())
-	AddPlayFilter(Serv())
 }

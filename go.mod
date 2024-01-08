@@ -12,7 +12,7 @@ require (
 	github.com/bluenviron/gortsplib/v4 v4.6.2
 	github.com/gin-contrib/cors v1.5.0
 	github.com/gin-gonic/gin v1.9.1
-	github.com/let-light/gomodule v0.4.7
+	github.com/let-light/gomodule v0.4.8
 	github.com/livekit/mediatransportutil v0.0.0-20231130090133-bd1456add80a
 	github.com/livekit/protocol v1.9.3
 	github.com/panjf2000/gnet v1.6.6

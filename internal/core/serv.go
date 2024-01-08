@@ -1,65 +1,75 @@
 package core
 
 import (
+	"context"
 	"errors"
-	"sync"
+
+	"github.com/pingostack/neon/internal/core/middleware"
+	"github.com/pingostack/neon/internal/core/router"
+	"github.com/pingostack/neon/pkg/eventemitter"
 )
 
 type serv struct {
-	namespaces sync.Map
+	*router.NSManager
+	middleware middleware.Matcher
+	ee         *eventemitter.EventEmitter
 }
 
-var servInstance *serv
+type ServerOption func(*serv)
 
-func Serv() *serv {
-	return servInstance
-}
+var (
+	defaultServ = NewServ(context.Background())
+)
 
-func init() {
-	servInstance = &serv{
-		namespaces: sync.Map{},
-	}
-}
+const (
+	defaultEventEmitterSize = 100
+)
 
-func (s *serv) InitStaticNamespaces(namespaces []NamespaceInfo) {
-	for _, ns := range namespaces {
-		s.namespaces.Store(ns.Name, NewNamespace(ns.Name, ns.Domain...))
-	}
-}
-
-func (s *serv) getOrNewNamespaceByDomain(req *PeerReq) (*Namespace, bool) {
-	var ns *Namespace
-	var newOne bool
-	s.namespaces.Range(func(key, value interface{}) bool {
-		ns = value.(*Namespace)
-		if ns.HasDomain(req.Domain) {
-			return false
-		}
-		return true
-	})
-
-	if ns == nil {
-		ns = NewNamespace(req.Domain)
-		s.namespaces.Store(req.Domain, ns)
-		newOne = true
+func NewServ(ctx context.Context) *serv {
+	s := &serv{
+		middleware: middleware.New(),
+		ee:         eventemitter.NewEventEmitter(ctx, defaultEventEmitterSize, DefaultLogger()),
+		NSManager:  router.NewNSManager(),
 	}
 
-	return ns, newOne
+	return s
 }
 
-func (s *serv) join(req *PeerReq) (*Namespace, *Stream, error) {
-	ns, _ := s.getOrNewNamespaceByDomain(req)
-	stream, _ := ns.GetOrNewStream(req.StreamID)
-	ok := stream.AddSessionIfNotExists(req.Session)
+func (s *serv) join(info *router.PeerInfo) error {
+	ns := s.NSManager.GetOrNewNamespace(info.Domain)
+	router, _ := ns.GetOrNewRouter(info.URI)
+	ok := router.AddSessionIfNotExists(info.Session)
 	if !ok {
-		return nil, nil, errors.New("session already exists")
+		return errors.New("session already exists")
 	}
 
-	return ns, stream, nil
+	info.Session.SetRouter(router)
+
+	return nil
 }
 
-func (s *serv) Publish(req *PublishReq) error {
-	ns, stream, err := s.join(&req.PeerReq)
+func (s *serv) Publish(req *router.PublishReq) error {
+	h := func(ctx context.Context, r interface{}) (interface{}, error) {
+		err := s.join(&req.PeerInfo)
+		if err != nil {
+			return nil, err
+		}
+
+		return nil, nil
+	}
+
+	if next := s.middleware.Match("publish"); len(next) > 0 {
+		_, err := middleware.Chain(next...)(h)(req.Ctx, req)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *serv) Play(req *router.PlayReq) error {
+	err := s.join(&req.PeerInfo)
 	if err != nil {
 		return err
 	}
@@ -67,11 +77,26 @@ func (s *serv) Publish(req *PublishReq) error {
 	return nil
 }
 
-func (s *serv) Play(req *PlayReq) error {
-	ns, stream, err := s.join(&req.PeerReq)
-	if err != nil {
-		return err
+func (s *serv) Middleware(m ...middleware.Middleware) ServerOption {
+	return func(s *serv) {
+		for _, middleware := range m {
+			s.middleware.Use(middleware)
+		}
 	}
+}
 
-	return nil
+func (s *serv) Use(selector string, m ...middleware.Middleware) ServerOption {
+	return func(s *serv) {
+		for _, middleware := range m {
+			s.middleware.Add(selector, middleware)
+		}
+	}
+}
+
+func Publish(req *router.PublishReq) error {
+	return defaultServ.Publish(req)
+}
+
+func Play(req *router.PlayReq) error {
+	return defaultServ.Play(req)
 }

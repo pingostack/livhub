@@ -1,15 +1,26 @@
 package pms
 
+import (
+	"github.com/pingostack/neon/internal/core/router"
+	"github.com/sirupsen/logrus"
+)
+
 type Session struct {
-	sessionId string
+	*router.SessionImpl
 }
 
-func NewSession(sessionId string) *Session {
+func NewSession(id string, logger *logrus.Entry) *Session {
 	return &Session{
-		sessionId: sessionId,
+		SessionImpl: router.NewSession(id, logger.WithFields(logrus.Fields{
+			"session": id,
+		})),
 	}
 }
 
-func (s *Session) SessionId() string {
-	return s.sessionId
+func (s *Session) Publish(req *router.PublishReq) error {
+	return nil
+}
+
+func (s *Session) Play(req *router.PlayReq) error {
+	return nil
 }

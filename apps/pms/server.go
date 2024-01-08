@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pingostack/neon/internal/core"
+	"github.com/pingostack/neon/internal/core/router"
 	"github.com/pingostack/neon/internal/httpserv"
 	"github.com/sirupsen/logrus"
 )
@@ -76,6 +78,20 @@ func (ss *SignalServer) handleRequestInternal(req Request) error {
 }
 
 func (ss *SignalServer) publish(req Request) error {
+	session := NewSession(req.Session, ss.logger)
+	err := core.Publish(&router.PublishReq{
+		PeerInfo: router.PeerInfo{
+			Session: session,
+			URI:     req.Stream,
+		},
+	})
+
+	if err != nil {
+		session.Logger().Errorf("publish failed: %v", err)
+		return err
+	}
+
+	session.Logger().Infof("publish success")
 
 	return nil
 }
