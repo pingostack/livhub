@@ -1,22 +1,50 @@
 package router
 
 import (
+	"context"
 	"sync"
+
+	"github.com/sirupsen/logrus"
 )
+
+type RouterParams struct {
+	IdleSubscriberTimeout int `yaml:"idle_subscriber_timeout" json:"idle_subscriber_timeout" mapstructure:"idle_subscriber_timeout"`
+	MaxProducerTimeout    int `yaml:"max_producer_timeout" json:"max_producer_timeout" mapstructure:"max_producer_timeout"`
+	MaxSubscriberTimeout  int `yaml:"max_subscriber_timeout" json:"max_subscriber_timeout" mapstructure:"max_subscriber_timeout"`
+}
+
+type NamespaceParams struct {
+	Name          string                  `yaml:"name" json:"name" mapstructure:"name"`
+	Domains       []string                `yaml:"domains" json:"domains" mapstructure:"domains"`
+	DefaultRouter RouterParams            `yaml:"default_router" json:"default_router" mapstructure:"default_router"`
+	Routers       map[string]RouterParams `yaml:"routers" json:"routers" mapstructure:"routers"`
+}
 
 type Namespace struct {
 	name    string
 	domains []string
 	routers map[string]*Router
 	lock    sync.RWMutex
+	ctx     context.Context
+	cancel  context.CancelFunc
+	logger  *logrus.Entry
+	params  NamespaceParams
 }
 
-func NewNamespace(name string, domains ...string) *Namespace {
-	return &Namespace{
-		name:    name,
-		domains: domains,
+func NewNamespace(ctx context.Context, params NamespaceParams) *Namespace {
+	ns := &Namespace{
+		params:  params,
+		name:    params.Name,
+		domains: params.Domains,
 		routers: make(map[string]*Router),
+		logger:  logrus.WithField("namespace", params.Name),
 	}
+
+	ns.ctx, ns.cancel = context.WithCancel(ctx)
+
+	ns.logger.WithField("params", params).Debugf("namespace created")
+
+	return ns
 }
 
 func (ns *Namespace) Name() string {
@@ -44,46 +72,26 @@ func (ns *Namespace) GetOrNewRouter(id string) (*Router, bool) {
 	defer ns.lock.Unlock()
 	router, ok := ns.routers[id]
 	if !ok {
-		router = NewRouter(ns, id)
+		routerParams := ns.params.DefaultRouter
+		if params, ok := ns.params.Routers[id]; ok {
+			routerParams = params
+		}
+
+		router = NewRouter(ns.ctx, ns, routerParams, id, ns.logger)
 		ns.routers[id] = router
+		go ns.waitRouter(router)
 	}
+
 	return router, !ok
 }
 
-func (ns *Namespace) DeleteRouter(name string) {
+func (ns *Namespace) waitRouter(router *Router) {
+	<-router.Context().Done()
 	ns.lock.Lock()
 	defer ns.lock.Unlock()
-	delete(ns.routers, name)
-}
 
-func (ns *Namespace) Routers() []*Router {
-	ns.lock.RLock()
-	defer ns.lock.RUnlock()
-	routers := make([]*Router, len(ns.routers))
-	i := 0
-	for _, router := range ns.routers {
-		routers[i] = router
-		i++
-	}
-
-	return routers
-}
-
-func (ns *Namespace) AddDomain(domains ...string) {
-	ns.lock.Lock()
-	defer ns.lock.Unlock()
-	ns.domains = append(ns.domains, domains...)
-}
-
-func (ns *Namespace) DeleteDomain(domain string) {
-	ns.lock.Lock()
-	defer ns.lock.Unlock()
-	for i, d := range ns.domains {
-		if d == domain {
-			ns.domains = append(ns.domains[:i], ns.domains[i+1:]...)
-			break
-		}
-	}
+	delete(ns.routers, router.ID())
+	ns.logger.Infof("router %s removed", router.ID())
 }
 
 func (ns *Namespace) HasDomain(domain string) bool {

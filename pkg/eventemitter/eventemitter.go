@@ -11,6 +11,11 @@ import (
 
 type eventId int
 
+type EventEmitter interface {
+	AddEvent(eventId eventId, f func(data interface{}))
+	EmitEvent(eventId eventId, data interface{}) error
+}
+
 type Event struct {
 	Signal eventId
 	Data   interface{}
@@ -20,7 +25,7 @@ func (e Event) String() string {
 	return fmt.Sprintf("{eventId: %d, data: %+v}", e.Signal, e.Data)
 }
 
-type EventEmitter struct {
+type EventEmitterImpl struct {
 	oneventLock sync.RWMutex
 	eventCh     chan Event
 	listeners   map[eventId][]func(data interface{})
@@ -37,8 +42,8 @@ func GenEventId() eventId {
 	return eventId(signalCounter.Inc())
 }
 
-func NewEventEmitter(ctx context.Context, size int, logger logger.Logger) *EventEmitter {
-	m := &EventEmitter{
+func NewEventEmitter(ctx context.Context, size int, logger logger.Logger) EventEmitter {
+	m := &EventEmitterImpl{
 		eventCh:   make(chan Event, size),
 		listeners: make(map[eventId][]func(data interface{})),
 		logger:    logger,
@@ -51,7 +56,7 @@ func NewEventEmitter(ctx context.Context, size int, logger logger.Logger) *Event
 	return m
 }
 
-func (m *EventEmitter) Emit(eventId eventId, data interface{}) error {
+func (m *EventEmitterImpl) EmitEvent(eventId eventId, data interface{}) error {
 	defer func() {
 		if r := recover(); r != nil {
 			if m.logger != nil {
@@ -77,7 +82,7 @@ func (m *EventEmitter) Emit(eventId eventId, data interface{}) error {
 	return nil
 }
 
-func (m *EventEmitter) run() {
+func (m *EventEmitterImpl) run() {
 	defer func() {
 		if m.logger != nil {
 			m.logger.Infof("EventEmitter stopped")
@@ -110,7 +115,7 @@ func (m *EventEmitter) run() {
 	}
 }
 
-func (m *EventEmitter) Add(eventId eventId, f func(data interface{})) {
+func (m *EventEmitterImpl) AddEvent(eventId eventId, f func(data interface{})) {
 	m.oneventLock.Lock()
 	defer m.oneventLock.Unlock()
 
@@ -124,13 +129,13 @@ func (m *EventEmitter) Add(eventId eventId, f func(data interface{})) {
 	m.listeners[eventId] = listeners
 }
 
-func (m *EventEmitter) Remove(eventId eventId) {
+func (m *EventEmitterImpl) Remove(eventId eventId) {
 	m.oneventLock.Lock()
 	defer m.oneventLock.Unlock()
 
 	delete(m.listeners, eventId)
 }
 
-func (m *EventEmitter) Close() {
+func (m *EventEmitterImpl) Close() {
 	m.cancel()
 }

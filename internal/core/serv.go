@@ -2,7 +2,6 @@ package core
 
 import (
 	"context"
-	"errors"
 
 	"github.com/pingostack/neon/internal/core/middleware"
 	"github.com/pingostack/neon/internal/core/router"
@@ -12,45 +11,60 @@ import (
 type serv struct {
 	*router.NSManager
 	middleware middleware.Matcher
-	ee         *eventemitter.EventEmitter
+	ee         eventemitter.EventEmitter
+	ctx        context.Context
 }
 
 type ServerOption func(*serv)
 
 var (
-	defaultServ = NewServ(context.Background())
+	defaultServ *serv
 )
 
 const (
 	defaultEventEmitterSize = 100
 )
 
-func NewServ(ctx context.Context) *serv {
+func NewServ(ctx context.Context, params router.NSManagerParams) *serv {
 	s := &serv{
+		ctx:        ctx,
 		middleware: middleware.New(),
 		ee:         eventemitter.NewEventEmitter(ctx, defaultEventEmitterSize, DefaultLogger()),
-		NSManager:  router.NewNSManager(),
+		NSManager:  router.NewNSManager(params),
 	}
 
 	return s
 }
 
-func (s *serv) join(info *router.PeerInfo) error {
-	ns := s.NSManager.GetOrNewNamespace(info.Domain)
-	router, _ := ns.GetOrNewRouter(info.URI)
-	ok := router.AddSessionIfNotExists(info.Session)
-	if !ok {
-		return errors.New("session already exists")
+func (s *serv) join(session router.Session) error {
+	defaultRetry := 2
+	for i := 0; i < defaultRetry; i++ {
+		ns, _ := s.NSManager.GetOrNewNamespace(s.ctx, session.PeerMeta().Domain)
+		router, _ := ns.GetOrNewRouter(session.PeerMeta().RouterID)
+		if session.PeerMeta().Producer {
+			err := router.SetProducer(session)
+			if err != nil {
+				session.Logger().Debugf("add producer failed: %v", err)
+				continue
+			}
+
+			break
+		} else {
+			err := router.AddSubscriber(session)
+			if err != nil {
+				session.Logger().Debugf("add subscriber failed: %v", err)
+				continue
+			}
+
+			break
+		}
 	}
-
-	info.Session.SetRouter(router)
-
 	return nil
 }
 
-func (s *serv) Publish(req *router.PublishReq) error {
-	h := func(ctx context.Context, r interface{}) (interface{}, error) {
-		err := s.join(&req.PeerInfo)
+func (s *serv) Join(ctx context.Context, session router.Session) error {
+	h := func(ctx context.Context, req middleware.Request) (interface{}, error) {
+		err := s.join(session)
 		if err != nil {
 			return nil, err
 		}
@@ -58,20 +72,14 @@ func (s *serv) Publish(req *router.PublishReq) error {
 		return nil, nil
 	}
 
-	if next := s.middleware.Match("publish"); len(next) > 0 {
-		_, err := middleware.Chain(next...)(h)(req.Ctx, req)
+	if next := s.middleware.Match("join"); len(next) > 0 {
+		_, err := middleware.Chain(next...)(h)(ctx, middleware.Request{
+			Operation: "join",
+			Params:    session,
+		})
 		if err != nil {
 			return err
 		}
-	}
-
-	return nil
-}
-
-func (s *serv) Play(req *router.PlayReq) error {
-	err := s.join(&req.PeerInfo)
-	if err != nil {
-		return err
 	}
 
 	return nil
@@ -91,12 +99,4 @@ func (s *serv) Use(selector string, m ...middleware.Middleware) ServerOption {
 			s.middleware.Add(selector, middleware)
 		}
 	}
-}
-
-func Publish(req *router.PublishReq) error {
-	return defaultServ.Publish(req)
-}
-
-func Play(req *router.PlayReq) error {
-	return defaultServ.Play(req)
 }

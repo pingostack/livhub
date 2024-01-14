@@ -16,6 +16,7 @@ type Stream struct {
 	lock            sync.RWMutex
 	waitMediaCtx    context.Context
 	waitMediaCancel context.CancelFunc
+	ctx             context.Context
 }
 
 func NewStream(ctx context.Context, desc *StreamDescription, logger *logrus.Entry) *Stream {
@@ -24,6 +25,7 @@ func NewStream(ctx context.Context, desc *StreamDescription, logger *logrus.Entr
 		medias: make(map[streaminterceptor.MediaType]*StreamMedia),
 		logger: logger,
 		id:     desc.ID,
+		ctx:    ctx,
 	}
 
 	s.waitMediaCtx, s.waitMediaCancel = context.WithCancel(ctx)

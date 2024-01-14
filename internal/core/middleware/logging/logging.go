@@ -10,7 +10,7 @@ import (
 
 func Logger(logger *logrus.Entry) middleware.Middleware {
 	return func(h middleware.Handler) middleware.Handler {
-		return func(ctx context.Context, req interface{}) (interface{}, error) {
+		return func(ctx context.Context, req middleware.Request) (interface{}, error) {
 			reply, err := h(ctx, req)
 			logger.Infof("request: %s, reply: %s, err: %v", toString(req), toString(reply), err)
 			return reply, err

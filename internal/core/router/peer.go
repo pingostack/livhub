@@ -3,63 +3,87 @@ package router
 import (
 	"context"
 	"sync"
+	"sync/atomic"
+	"unsafe"
 
+	"github.com/gogf/gf/util/guid"
+	"github.com/pingostack/neon/pkg/eventemitter"
 	"github.com/sirupsen/logrus"
 )
 
-type PeerInfo struct {
-	Session Session
-	Domain  string
-	URI     string // URI is the path of the request, e.g. /live/room1
-	Args    map[string]string
-}
+const (
+	defaultEventEmitterSize = 100
+)
 
-type PublishReq struct {
-	Ctx context.Context
-	PeerInfo
-}
-
-type PlayReq struct {
-	Ctx context.Context
-	PeerInfo
+type PeerMeta struct {
+	RemoteAddr     string
+	LocalAddr      string
+	PeerID         string
+	RouterID       string
+	Domain         string
+	URI            string // URI is the path of the request, e.g. /live/room1
+	Args           map[string]string
+	Producer       bool
+	HasAudio       bool
+	HasVideo       bool
+	HasDataChannel bool
 }
 
 type Session interface {
+	eventemitter.EventEmitter
 	ID() string
+	RouterID() string
 	Close()
 	Set(key, value interface{})
 	Get(key interface{}) interface{}
-	SetRouter(router *Router)
-	GetRouter() *Router
 	Logger() *logrus.Entry
+	Context() context.Context
+	GetNamespace() *Namespace
+	SetNamespace(ns *Namespace)
+	PeerMeta() PeerMeta
+	Finalize(e error)
 }
 
 type SessionImpl struct {
+	eventemitter.EventEmitter
 	id     string
 	ns     *Namespace
-	router *Router
 	kv     *sync.Map
-	lock   sync.RWMutex
 	logger *logrus.Entry
-	chIn   chan interface{}
-	chOut  chan interface{}
+	ctx    context.Context
+	cancel context.CancelFunc
+	pm     PeerMeta
 }
 
-func NewSession(id string, logger *logrus.Entry) *SessionImpl {
-	return &SessionImpl{
-		id:     id,
-		kv:     &sync.Map{},
-		logger: logger,
-		chIn:   make(chan interface{}),
-		chOut:  make(chan interface{}),
+func NewSession(ctx context.Context, pm PeerMeta, logger *logrus.Entry) *SessionImpl {
+	s := &SessionImpl{
+		id: guid.S(),
+		kv: &sync.Map{},
 	}
+
+	s.logger = logger.WithFields(logrus.Fields{
+		"session": s.id,
+		"peer":    pm.PeerID,
+	})
+	s.ctx, s.cancel = context.WithCancel(ctx)
+	s.EventEmitter = eventemitter.NewEventEmitter(s.ctx,
+		defaultEventEmitterSize,
+		logger.WithField("submodule", "eventemitter"))
+
+	return s
 }
 
 func (s *SessionImpl) ID() string {
 	return s.id
 }
 
-func (s *SessionImpl) Close() {
+func (s *SessionImpl) RouterID() string {
+	return s.pm.RouterID
+}
+
+func (s *SessionImpl) Finalize(e error) {
+	s.cancel()
+	s.logger.WithError(e).Infof("session finalized")
 }
 
 func (s *SessionImpl) Set(key, value interface{}) {
@@ -71,24 +95,23 @@ func (s *SessionImpl) Get(key interface{}) interface{} {
 	return v
 }
 
-func (s *SessionImpl) SetRouter(router *Router) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	s.router = router
+func (s *SessionImpl) SetNamespace(ns *Namespace) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&s.ns)), unsafe.Pointer(ns))
 }
 
 func (s *SessionImpl) GetNamespace() *Namespace {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	return s.ns
-}
-
-func (s *SessionImpl) GetRouter() *Router {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	return s.router
+	val := atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&s.ns)))
+	return (*Namespace)(val)
 }
 
 func (s *SessionImpl) Logger() *logrus.Entry {
 	return s.logger
+}
+
+func (s *SessionImpl) Context() context.Context {
+	return s.ctx
+}
+
+func (s *SessionImpl) PeerMeta() PeerMeta {
+	return s.pm
 }

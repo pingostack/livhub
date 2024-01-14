@@ -2,9 +2,14 @@ package middleware
 
 import "context"
 
+type Request struct {
+	Operation string      `json:"operation"`
+	Params    interface{} `json:"params"`
+}
+
 type Middleware func(Handler) Handler
 
-type Handler func(ctx context.Context, req interface{}) (interface{}, error)
+type Handler func(ctx context.Context, req Request) (interface{}, error)
 
 func Chain(m ...Middleware) Middleware {
 	return func(next Handler) Handler {

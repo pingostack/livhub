@@ -12,6 +12,7 @@ require (
 	github.com/bluenviron/gortsplib/v4 v4.6.2
 	github.com/gin-contrib/cors v1.5.0
 	github.com/gin-gonic/gin v1.9.1
+	github.com/gogf/gf v1.16.9
 	github.com/let-light/gomodule v0.4.8
 	github.com/livekit/mediatransportutil v0.0.0-20231130090133-bd1456add80a
 	github.com/livekit/protocol v1.9.3
@@ -26,6 +27,7 @@ require (
 	github.com/pion/stun v0.6.1
 	github.com/pion/webrtc/v3 v3.2.23
 	github.com/pkg/errors v0.9.1
+	github.com/samber/lo v1.39.0
 	go.uber.org/atomic v1.11.0
 	golang.org/x/exp v0.0.0-20231206192017-f3f8817b8deb
 )
@@ -43,7 +45,6 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.15.5 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
-	github.com/gogf/gf v1.16.9 // indirect
 	github.com/google/uuid v1.4.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
