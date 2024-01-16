@@ -18,7 +18,7 @@ func NewStreamMedia(metadata *streaminterceptor.Metadata, logger *logrus.Entry) 
 	m := &StreamMedia{
 		metadata: metadata,
 		formats:  make(map[string]*StreamFormat),
-		logger:   logger.WithField("media", metadata.MediaType),
+		logger:   logger.WithField("MediaKind", metadata.Kind),
 	}
 
 	return m

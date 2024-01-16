@@ -45,7 +45,7 @@ type Transport struct {
 	icc           *config.ICEConfig
 	allowedCodecs []config.CodecConfig
 	logger        logger.Logger
-	eventemitter  *eventemitter.EventEmitter
+	eventemitter  eventemitter.EventEmitter
 	ctx           context.Context
 	cancel        context.CancelFunc
 
@@ -84,10 +84,10 @@ func NewTransport(opts ...TransportOpt) (*Transport, error) {
 		return nil, errors.Wrap(err, "invalid transport")
 	}
 
-	t.eventemitter.Add(signalLocalICECandidate, t.handleLocalICECandidate)
-	t.eventemitter.Add(signalRemoteICECandidate, t.handleRemoteICECandidate)
-	t.eventemitter.Add(signalICEGatheringComplete, t.handleICEGatheringComplete)
-	t.eventemitter.Add(signalCloseTransport, t.handleCloseTransport)
+	t.eventemitter.AddEvent(signalLocalICECandidate, t.handleLocalICECandidate)
+	t.eventemitter.AddEvent(signalRemoteICECandidate, t.handleRemoteICECandidate)
+	t.eventemitter.AddEvent(signalICEGatheringComplete, t.handleICEGatheringComplete)
+	t.eventemitter.AddEvent(signalCloseTransport, t.handleCloseTransport)
 	t.PeerConnection.OnICECandidate(func(candidate *webrtc.ICECandidate) {
 		if candidate == nil {
 			return
@@ -95,7 +95,7 @@ func NewTransport(opts ...TransportOpt) (*Transport, error) {
 
 		t.logger.Debugf("ICE candidate: %s", candidate.String())
 
-		t.eventemitter.Emit(signalLocalICECandidate, candidate)
+		t.eventemitter.EmitEvent(signalLocalICECandidate, candidate)
 	})
 
 	t.PeerConnection.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
@@ -175,7 +175,7 @@ func WithLogger(logger logger.Logger) func(t *Transport) {
 	}
 }
 
-func WithEventEmitter(eventemitter *eventemitter.EventEmitter) func(t *Transport) {
+func WithEventEmitter(eventemitter eventemitter.EventEmitter) func(t *Transport) {
 	return func(t *Transport) {
 		t.eventemitter = eventemitter
 	}
@@ -588,7 +588,7 @@ func (t *Transport) handleCloseTransport(data interface{}) {
 	if t.PeerConnection != nil {
 		t.PeerConnection.Close()
 	}
-	t.eventemitter.Close()
+	t.cancel()
 }
 
 func (t *Transport) OnICECandidate(f func(candidate webrtc.ICECandidateInit)) {
@@ -617,7 +617,7 @@ func (t *Transport) validate() error {
 	}
 
 	if t.eventemitter == nil {
-		t.eventemitter = eventemitter.NewEventEmitter(context.Background(), defaultEventEmitterLength, t.logger)
+		t.eventemitter = eventemitter.NewEventEmitter(t.ctx, defaultEventEmitterLength, t.logger)
 	}
 
 	if t.icc == nil {
@@ -702,10 +702,10 @@ func (t *Transport) Logger() logger.Logger {
 	return t.logger
 }
 
-func (t *Transport) EventEmitter() *eventemitter.EventEmitter {
+func (t *Transport) EventEmitter() eventemitter.EventEmitter {
 	return t.eventemitter
 }
 
 func (t *Transport) Finalize() {
-	t.eventemitter.Emit(signalCloseTransport, nil)
+	t.eventemitter.EmitEvent(signalCloseTransport, nil)
 }

@@ -11,5 +11,5 @@ type StreamDescription struct {
 	HasAudio    bool
 	SyncTimeout time.Duration
 	ID          string
-	Medias      []*streaminterceptor.Metadata
+	Medias      map[streaminterceptor.MediaKind]*streaminterceptor.Metadata
 }

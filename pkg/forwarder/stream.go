@@ -10,7 +10,7 @@ import (
 
 type Stream struct {
 	id              string
-	medias          map[streaminterceptor.MediaType]*StreamMedia
+	medias          map[streaminterceptor.MediaKind]*StreamMedia
 	desc            *StreamDescription
 	logger          *logrus.Entry
 	lock            sync.RWMutex
@@ -22,7 +22,7 @@ type Stream struct {
 func NewStream(ctx context.Context, desc *StreamDescription, logger *logrus.Entry) *Stream {
 	s := &Stream{
 		desc:   desc,
-		medias: make(map[streaminterceptor.MediaType]*StreamMedia),
+		medias: make(map[streaminterceptor.MediaKind]*StreamMedia),
 		logger: logger,
 		id:     desc.ID,
 		ctx:    ctx,
@@ -41,12 +41,12 @@ func (s *Stream) AddMedia(meta *streaminterceptor.Metadata) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if _, ok := s.medias[meta.MediaType]; ok {
+	if _, ok := s.medias[meta.Kind]; ok {
 		return
 	}
 
-	s.medias[meta.MediaType] = NewStreamMedia(meta, s.logger)
-	s.desc.Medias = append(s.desc.Medias, meta)
+	s.medias[meta.Kind] = NewStreamMedia(meta, s.logger)
+	s.desc.Medias[meta.Kind] = meta
 
 	if s.desc.HasAudio && s.desc.HasVideo {
 		if len(s.medias) >= 2 &&
@@ -54,14 +54,14 @@ func (s *Stream) AddMedia(meta *streaminterceptor.Metadata) {
 			s.medias[streaminterceptor.MediaTypeVideo] != nil {
 			s.waitMediaCancel()
 		}
-	} else if s.desc.HasAudio && meta.MediaType == streaminterceptor.MediaTypeAudio {
+	} else if s.desc.HasAudio && meta.Kind == streaminterceptor.MediaTypeAudio {
 		s.waitMediaCancel()
-	} else if s.desc.HasVideo && meta.MediaType == streaminterceptor.MediaTypeVideo {
+	} else if s.desc.HasVideo && meta.Kind == streaminterceptor.MediaTypeVideo {
 		s.waitMediaCancel()
 	}
 }
 
-func (s *Stream) Media(mediaType streaminterceptor.MediaType) *StreamMedia {
+func (s *Stream) Media(mediaType streaminterceptor.MediaKind) *StreamMedia {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 

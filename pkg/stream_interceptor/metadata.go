@@ -1,13 +1,13 @@
 package streaminterceptor
 
-type MediaType string
+type MediaKind string
 
 const (
-	MediaTypeVideo       MediaType = "video"
-	MediaTypeAudio       MediaType = "audio"
-	MediaTypeApplication MediaType = "application"
+	MediaTypeVideo       MediaKind = "video"
+	MediaTypeAudio       MediaKind = "audio"
+	MediaTypeApplication MediaKind = "application"
 )
 
 type Metadata struct {
-	MediaType MediaType
+	Kind MediaKind
 }

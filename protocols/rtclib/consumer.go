@@ -15,14 +15,14 @@ type Consumer struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
 	logger       logger.Logger
-	eventemitter *eventemitter.EventEmitter
+	eventemitter eventemitter.EventEmitter
 }
 
 func NewConsumer(transport *transport.Transport) (*Consumer, error) {
 	c := &Consumer{
 		Transport:    transport,
 		logger:       transport.Logger(),
-		eventemitter: eventemitter.NewEventEmitter(transport.Context(), 10, transport.Logger()),
+		eventemitter: eventemitter.NewEventEmitter(transport.Context(), defaultEventEmitterLength, transport.Logger()),
 	}
 
 	c.ctx, c.cancel = context.WithCancel(transport.Context())
