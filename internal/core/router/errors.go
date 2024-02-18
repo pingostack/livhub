@@ -1,4 +1,4 @@
-package err
+package router
 
 import "errors"
 
@@ -10,4 +10,7 @@ var (
 	ErrSessionIdleTimeout   = errors.New("session idle timeout")
 	ErrProducerEmpty        = errors.New("producer empty")
 	ErrProducerRepeated     = errors.New("producer repeated")
+	ErrStreamFormatNotFound = errors.New("stream format not found")
+	ErrStreamClosed         = errors.New("stream closed")
+	ErrStreamCodecMismatch  = errors.New("stream codec mismatch")
 )

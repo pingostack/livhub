@@ -2,6 +2,10 @@ package middleware
 
 import "context"
 
+const (
+	OperationJoin = "join"
+)
+
 type Request struct {
 	Operation string      `json:"operation"`
 	Params    interface{} `json:"params"`

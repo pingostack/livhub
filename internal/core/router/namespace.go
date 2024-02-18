@@ -14,16 +14,16 @@ type RouterParams struct {
 }
 
 type NamespaceParams struct {
-	Name          string                  `yaml:"name" json:"name" mapstructure:"name"`
-	Domains       []string                `yaml:"domains" json:"domains" mapstructure:"domains"`
-	DefaultRouter RouterParams            `yaml:"default_router" json:"default_router" mapstructure:"default_router"`
-	Routers       map[string]RouterParams `yaml:"routers" json:"routers" mapstructure:"routers"`
+	Name                string                  `yaml:"name" json:"name" mapstructure:"name"`
+	Domains             []string                `yaml:"domains" json:"domains" mapstructure:"domains"`
+	DefaultRouterParams RouterParams            `yaml:"default_router" json:"default_router" mapstructure:"default_router"`
+	RoutersParams       map[string]RouterParams `yaml:"routers" json:"routers" mapstructure:"routers"`
 }
 
 type Namespace struct {
 	name    string
 	domains []string
-	routers map[string]*Router
+	routers map[string]Router
 	lock    sync.RWMutex
 	ctx     context.Context
 	cancel  context.CancelFunc
@@ -36,7 +36,7 @@ func NewNamespace(ctx context.Context, params NamespaceParams) *Namespace {
 		params:  params,
 		name:    params.Name,
 		domains: params.Domains,
-		routers: make(map[string]*Router),
+		routers: make(map[string]Router),
 		logger:  logrus.WithField("namespace", params.Name),
 	}
 
@@ -61,31 +61,35 @@ func (ns *Namespace) Domains() []string {
 	return domains
 }
 
-func (ns *Namespace) Router(name string) *Router {
+func (ns *Namespace) Router(name string) Router {
 	ns.lock.RLock()
 	defer ns.lock.RUnlock()
 	return ns.routers[name]
 }
 
-func (ns *Namespace) GetOrNewRouter(id string) (*Router, bool) {
+func (ns *Namespace) GetOrNewRouter(id string) (Router, bool) {
 	ns.lock.Lock()
 	defer ns.lock.Unlock()
 	router, ok := ns.routers[id]
-	if !ok {
-		routerParams := ns.params.DefaultRouter
-		if params, ok := ns.params.Routers[id]; ok {
+	if !ok || router.Closed() {
+		if ok {
+			delete(ns.routers, id)
+		}
+
+		routerParams := ns.params.DefaultRouterParams
+		if params, ok := ns.params.RoutersParams[id]; ok {
 			routerParams = params
 		}
 
 		router = NewRouter(ns.ctx, ns, routerParams, id, ns.logger)
 		ns.routers[id] = router
-		go ns.waitRouter(router)
+		go ns.waitRouterDone(router)
 	}
 
 	return router, !ok
 }
 
-func (ns *Namespace) waitRouter(router *Router) {
+func (ns *Namespace) waitRouterDone(router Router) {
 	<-router.Context().Done()
 	ns.lock.Lock()
 	defer ns.lock.Unlock()
@@ -103,4 +107,15 @@ func (ns *Namespace) HasDomain(domain string) bool {
 		}
 	}
 	return false
+}
+
+func (ns *Namespace) RemoveRouter(r Router) {
+	ns.lock.Lock()
+	defer ns.lock.Unlock()
+	checkRouter, ok := ns.routers[r.ID()]
+	if !ok || checkRouter != r {
+		return
+	}
+
+	delete(ns.routers, r.ID())
 }

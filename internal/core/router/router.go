@@ -2,17 +2,22 @@ package router
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"sync"
 	"time"
 
 	"github.com/gogf/gf/os/gtimer"
-	"github.com/pingostack/neon/internal/err"
 	"github.com/sirupsen/logrus"
 )
 
-type Router struct {
+type Router interface {
+	ID() string
+	AddSession(session Session) error
+	Namespace() *Namespace
+	Context() context.Context
+	Closed() bool
+}
+
+type RouterImpl struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
 	id          string
@@ -23,15 +28,18 @@ type Router struct {
 	logger      *logrus.Entry
 	closed      bool
 	params      RouterParams
+	closeTimer  *gtimer.Entry
+	stream      Stream
 }
 
-func NewRouter(ctx context.Context, ns *Namespace, params RouterParams, id string, logger *logrus.Entry) *Router {
-	r := &Router{
+func NewRouter(ctx context.Context, ns *Namespace, params RouterParams, id string, logger *logrus.Entry) Router {
+	r := &RouterImpl{
 		ns:          ns,
 		params:      params,
 		id:          id,
 		subscribers: make(map[string]Session),
 		logger:      logger.WithField("router", id),
+		stream:      NewStreamImpl(ctx),
 	}
 
 	r.ctx, r.cancel = context.WithCancel(ctx)
@@ -41,49 +49,63 @@ func NewRouter(ctx context.Context, ns *Namespace, params RouterParams, id strin
 	return r
 }
 
-func (r *Router) ID() string {
+func (r *RouterImpl) ID() string {
 	return r.id
 }
 
-func (r *Router) SetProducer(session Session) error {
+func (r *RouterImpl) addProducer(session Session) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
 	if r.closed {
-		return errors.Join(fmt.Errorf("router %s closed", r.id), err.ErrRouterClosed)
+		return ErrRouterClosed
+	}
+
+	if r.closeTimer != nil {
+		r.closeTimer.Stop()
+		r.closeTimer.Close()
+		r.closeTimer = nil
 	}
 
 	if r.producer != nil {
-		r.producer.Finalize(err.ErrProducerRepeated)
+		r.producer.Finalize(ErrProducerRepeated)
 	}
 
 	r.producer = session
 
-	go r.waitSession(true, session)
+	go r.waitSessionDone(session)
 
 	return nil
 }
 
-func (r *Router) AddSubscriber(session Session) error {
+func (r *RouterImpl) addSubscriber(session Session) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
 	if r.closed {
-		return errors.Join(fmt.Errorf("router %s closed", r.id), err.ErrRouterClosed)
+		return ErrRouterClosed
 	}
 
 	if _, ok := r.subscribers[session.ID()]; ok {
-		return errors.Join(fmt.Errorf("session %s already exists", session.ID()), err.ErrSessionAlreadyExists)
+		return ErrSessionAlreadyExists
 	}
 
 	r.subscribers[session.ID()] = session
 
-	go r.waitSession(false, session)
+	go r.waitSessionDone(session)
 
 	return nil
 }
 
-func (r *Router) waitSession(isProducer bool, s Session) {
+func (r *RouterImpl) AddSession(session Session) error {
+	if session.PeerMeta().Producer {
+		return r.addProducer(session)
+	} else {
+		return r.addSubscriber(session)
+	}
+}
+
+func (r *RouterImpl) waitSessionDone(s Session) {
 	<-s.Context().Done()
 
 	close := func(e error) {
@@ -106,21 +128,22 @@ func (r *Router) waitSession(isProducer bool, s Session) {
 	}
 
 	delayClose := func() {
-		gtimer.AddOnce(time.Duration(r.params.IdleSubscriberTimeout)*time.Second, func() {
+		r.closeTimer = gtimer.AddOnce(time.Duration(r.params.IdleSubscriberTimeout)*time.Second, func() {
 			r.lock.Lock()
 			defer r.lock.Unlock()
 
 			if r.producer != nil {
 				r.logger.Infof("router idle timeout")
-				close(err.ErrSessionIdleTimeout)
+				close(ErrSessionIdleTimeout)
 			}
 		})
+		r.closeTimer.Start()
 	}
 
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	if isProducer {
+	if s.PeerMeta().Producer {
 		r.producer = nil
 		r.logger.Infof("producer %s removed", s.ID())
 		if len(r.subscribers) > 0 {
@@ -129,7 +152,7 @@ func (r *Router) waitSession(isProducer bool, s Session) {
 				return
 			} else if r.params.IdleSubscriberTimeout == 0 {
 				r.logger.Infof("router idle timeout is 0, close router")
-				close(err.ErrProducerEmpty)
+				close(ErrProducerEmpty)
 				return
 			} else {
 				r.logger.Debugf("router idle timeout disabled, keep router")
@@ -146,10 +169,14 @@ func (r *Router) waitSession(isProducer bool, s Session) {
 	}
 }
 
-func (r *Router) Namespace() *Namespace {
+func (r *RouterImpl) Namespace() *Namespace {
 	return r.ns
 }
 
-func (r *Router) Context() context.Context {
+func (r *RouterImpl) Context() context.Context {
 	return r.ctx
+}
+
+func (r *RouterImpl) Closed() bool {
+	return r.closed
 }

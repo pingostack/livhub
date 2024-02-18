@@ -37,28 +37,23 @@ func NewServ(ctx context.Context, params router.NSManagerParams) *serv {
 }
 
 func (s *serv) join(session router.Session) error {
-	defaultRetry := 2
-	for i := 0; i < defaultRetry; i++ {
-		ns, _ := s.NSManager.GetOrNewNamespace(s.ctx, session.PeerMeta().Domain)
-		router, _ := ns.GetOrNewRouter(session.PeerMeta().RouterID)
-		if session.PeerMeta().Producer {
-			err := router.SetProducer(session)
-			if err != nil {
-				session.Logger().Debugf("add producer failed: %v", err)
-				continue
-			}
-
-			break
-		} else {
-			err := router.AddSubscriber(session)
-			if err != nil {
-				session.Logger().Debugf("add subscriber failed: %v", err)
-				continue
-			}
-
-			break
+	ns, _ := s.NSManager.GetOrNewNamespace(s.ctx, session.PeerMeta().Domain)
+	r, _ := ns.GetOrNewRouter(session.PeerMeta().RouterID)
+	err := r.AddSession(session)
+	if err == router.ErrRouterClosed {
+		ns.RemoveRouter(r)
+		r, _ = ns.GetOrNewRouter(session.PeerMeta().RouterID)
+		err = r.AddSession(session)
+		if err != nil {
+			return err
 		}
+	} else if err != nil {
+		return err
 	}
+
+	session.SetRouter(r)
+	session.SetNamespace(ns)
+
 	return nil
 }
 
@@ -74,7 +69,7 @@ func (s *serv) Join(ctx context.Context, session router.Session) error {
 
 	if next := s.middleware.Match("join"); len(next) > 0 {
 		_, err := middleware.Chain(next...)(h)(ctx, middleware.Request{
-			Operation: "join",
+			Operation: middleware.OperationJoin,
 			Params:    session,
 		})
 		if err != nil {

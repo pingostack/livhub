@@ -8,7 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func Logger(logger *logrus.Entry) middleware.Middleware {
+func Recovery(logger *logrus.Entry) middleware.Middleware {
 	return func(h middleware.Handler) middleware.Handler {
 		return func(ctx context.Context, req middleware.Request) (interface{}, error) {
 			reply, err := h(ctx, req)
