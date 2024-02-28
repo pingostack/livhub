@@ -1,4 +1,4 @@
-package transport
+package rtcerror
 
 import "errors"
 
@@ -10,4 +10,8 @@ var (
 	ErrNoAnswer        = errors.New("no answer")
 	ErrICETimeout      = errors.New("ice timeout")
 	ErrPanics          = errors.New("panics")
+	ErrSdpUnmarshal    = errors.New("sdp unmarshal error")
+	ErrInvalidRtpmap   = errors.New("invalid rtpmap")
+	ErrNoPayload       = errors.New("no payload type found")
+	ErrNoRtxPayload    = errors.New("no rtx payload type found")
 )

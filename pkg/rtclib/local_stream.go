@@ -6,7 +6,7 @@ import (
 	"github.com/bluenviron/gortsplib/v4/pkg/format"
 	"github.com/pingostack/neon/pkg/eventemitter"
 	"github.com/pingostack/neon/pkg/logger"
-	"github.com/pingostack/neon/protocols/rtclib/transport"
+	"github.com/pingostack/neon/pkg/rtclib/transport"
 	"github.com/pkg/errors"
 )
 

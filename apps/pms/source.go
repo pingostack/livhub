@@ -6,7 +6,7 @@ import (
 
 	"github.com/pingostack/neon/internal/rtc"
 	"github.com/pingostack/neon/pkg/deliver"
-	"github.com/pingostack/neon/protocols/rtclib"
+	"github.com/pingostack/neon/pkg/rtclib"
 	"github.com/pion/webrtc/v4"
 	"github.com/sirupsen/logrus"
 )

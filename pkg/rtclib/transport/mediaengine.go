@@ -3,7 +3,7 @@ package transport
 import (
 	"strings"
 
-	"github.com/pingostack/neon/protocols/rtclib/config"
+	"github.com/pingostack/neon/pkg/rtclib/config"
 	"github.com/pion/webrtc/v4"
 )
 

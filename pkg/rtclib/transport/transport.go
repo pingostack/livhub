@@ -12,8 +12,9 @@ import (
 	lksdp "github.com/livekit/protocol/sdp"
 	"github.com/pingostack/neon/pkg/eventemitter"
 	"github.com/pingostack/neon/pkg/logger"
-	"github.com/pingostack/neon/protocols/rtclib/config"
-	"github.com/pingostack/neon/protocols/rtclib/sdpassistor"
+	"github.com/pingostack/neon/pkg/rtclib/config"
+	"github.com/pingostack/neon/pkg/rtclib/rtcerror"
+	"github.com/pingostack/neon/pkg/rtclib/sdpassistor"
 	"github.com/pion/dtls/v2/pkg/crypto/elliptic"
 	"github.com/pion/interceptor"
 	"github.com/pion/webrtc/v4"
@@ -280,17 +281,17 @@ func (t *Transport) handleConnectionFailed(forceShortConn bool) {
 func (t *Transport) getSelectedPair() (*webrtc.ICECandidatePair, error) {
 	sctp := t.PeerConnection.SCTP()
 	if sctp == nil {
-		return nil, ErrEventNoSCTP
+		return nil, rtcerror.ErrEventNoSCTP
 	}
 
 	dtlsTransport := sctp.Transport()
 	if dtlsTransport == nil {
-		return nil, ErrNoDTLSTransport
+		return nil, rtcerror.ErrNoDTLSTransport
 	}
 
 	iceTransport := dtlsTransport.ICETransport()
 	if iceTransport == nil {
-		return nil, ErrNoICETransport
+		return nil, rtcerror.ErrNoICETransport
 	}
 
 	return iceTransport.GetSelectedCandidatePair()
@@ -529,7 +530,7 @@ func (t *Transport) ResetShortConnOnICERestart() {
 func (t *Transport) EnableRemoteCandidates() error {
 	for _, c := range t.pendingRemoteCandidates {
 		if e := t.PeerConnection.AddICECandidate(*c); e != nil {
-			return errors.Wrap(ErrAddIceCandidate, e.Error())
+			return errors.Wrap(rtcerror.ErrAddIceCandidate, e.Error())
 		}
 	}
 
@@ -653,6 +654,7 @@ func (t *Transport) SetRemoteDescription(sd webrtc.SessionDescription) (answer w
 
 	filter := sdpassistor.NewSdpFilter(t.preferTCP.Load(), true)
 
+	t.logger.Debugf("Filtering SDP: %s", localSdp.SDP)
 	answer, err = filter.Filter(*localSdp)
 	if err != nil {
 		err = errors.Wrap(err, "failed to filter sdp")
