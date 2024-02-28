@@ -6,9 +6,11 @@ import (
 	"github.com/pingostack/neon/pkg/deliver"
 )
 
-func NewMediaMux(ctx context.Context, audioCodec, videoCodec deliver.FrameCodec, inPacketType deliver.PacketType) (MediaMux, error) {
-	if inPacketType == deliver.PacketTypeRaw {
-		return NewNoopMux(ctx, audioCodec, inPacketType, inPacketType), nil
+func NewMediaMux(ctx context.Context,
+	acodec, vcodec deliver.CodecType,
+	outPacketType deliver.PacketType) (MediaMux, error) {
+	if outPacketType == deliver.PacketTypeRaw {
+		return NewNoopMux(ctx, acodec, vcodec, outPacketType), nil
 	} else {
 		return nil, ErrMuxNotSupported
 	}

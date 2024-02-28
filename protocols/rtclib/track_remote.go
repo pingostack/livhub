@@ -6,7 +6,7 @@ import (
 	"github.com/pingostack/neon/pkg/logger"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
-	"github.com/pion/webrtc/v3"
+	"github.com/pion/webrtc/v4"
 )
 
 type TrackRemote struct {

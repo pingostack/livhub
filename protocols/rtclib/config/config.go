@@ -120,17 +120,17 @@ func (pr *PortRange) ToSlice() []int {
 }
 
 type Settings struct {
-	UseICELite              bool             `json:"use_ice_lite,omitempty" yaml:"use_ice_lite,omitempty" mapstructure:"use_ice_lite,omitempty"`
-	NAT1To1IPs              []string         `json:"nat_1to1_ips,omitempty" yaml:"nat_1to1_ips,omitempty" mapstructure:"nat_1to1_ips,omitempty"`
-	AutoGenerateExternalIP  bool             `json:"auto_generate_external_ip,omitempty" yaml:"auto_generate_external_ip,omitempty" mapstructure:"auto_generate_external_ip,omitempty"`
-	ICEPortRange            PortRange        `json:"ice_port_range,omitempty" yaml:"ice_port_range,omitempty" mapstructure:"ice_port_range,omitempty"`
-	UDPMuxPort              PortRange        `json:"udp_mux_port,omitempty" yaml:"udp_mux_port,omitempty" mapstructure:"udp_mux_port,omitempty"`
-	TCPPort                 int              `json:"tcp_port,omitempty" yaml:"tcp_port,omitempty" mapstructure:"tcp_port,omitempty"`
-	STUNServers             []string         `json:"stun_servers,omitempty" yaml:"stun_servers,omitempty" mapstructure:"stun_servers,omitempty"`
+	UseICELite              bool             `json:"useIceLite,omitempty" yaml:"useIceLite,omitempty" mapstructure:"useIceLite,omitempty"`
+	NAT1To1IPs              []string         `json:"nat1to1Ips,omitempty" yaml:"nat1to1Ips,omitempty" mapstructure:"nat1to1Ips,omitempty"`
+	AutoGenerateExternalIP  bool             `json:"autoGenerateExternalIp,omitempty" yaml:"autoGenerateExternalIp,omitempty" mapstructure:"autoGenerateExternalIp,omitempty"`
+	ICEPortRange            PortRange        `json:"icePortRange,omitempty" yaml:"icePortRange,omitempty" mapstructure:"icePortRange,omitempty"`
+	UDPMuxPort              PortRange        `json:"udpMuxPort,omitempty" yaml:"udpMuxPort,omitempty" mapstructure:"udpMuxPort,omitempty"`
+	TCPPort                 int              `json:"tcpPort,omitempty" yaml:"tcpPort,omitempty" mapstructure:"tcpPort,omitempty"`
+	STUNServers             []string         `json:"stunServers,omitempty" yaml:"stunServers,omitempty" mapstructure:"stunServers,omitempty"`
 	Interfaces              InterfacesConfig `json:"interfaces,omitempty" yaml:"interfaces,omitempty" mapstructure:"interfaces,omitempty"`
 	IPs                     IPsConfig        `json:"ips,omitempty" yaml:"ips,omitempty" mapstructure:"ips,omitempty"`
 	EnableLoopbackCandidate bool             `json:"enable_loopback_candidate,omitempty" yaml:"enable_loopback_candidate,omitempty" mapstructure:"enable_loopback_candidate,omitempty"`
-	UseMDNS                 bool             `json:"use_mdns,omitempty" yaml:"use_mdns,omitempty" mapstructure:"use_mdns,omitempty"`
+	UseMDNS                 bool             `json:"useMdns,omitempty" yaml:"useMdns,omitempty" mapstructure:"useMdns,omitempty"`
 	BatchIO                 BatchIOConfig    `json:"batch_io,omitempty" yaml:"batch_io,omitempty" mapstructure:"batch_io,omitempty"`
 	ForceTCP                bool             `json:"force_tcp,omitempty" yaml:"force_tcp,omitempty" mapstructure:"force_tcp,omitempty"`
 	ICEConfig               ICEConfig        `json:"ice_config,omitempty" yaml:"ice_config,omitempty" mapstructure:"ice_config,omitempty"`

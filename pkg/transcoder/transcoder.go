@@ -17,7 +17,7 @@ type NoopTranscoder struct {
 	deliver.MediaFrameMulticaster
 }
 
-func NewNoopTranscoder(ctx context.Context, inCodec deliver.FrameCodec) Transcoder {
+func NewNoopTranscoder(ctx context.Context, inCodec deliver.CodecType) Transcoder {
 	return &NoopTranscoder{
 		MediaFrameMulticaster: deliver.NewMediaFrameMulticaster(ctx, inCodec, inCodec, deliver.PacketTypeRaw, deliver.PacketTypeRaw),
 	}

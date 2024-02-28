@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/bluenviron/gortsplib/v4/pkg/sdp"
 	"github.com/gin-gonic/gin"
 	"github.com/gogf/gf/util/guid"
 	"github.com/pingostack/neon/internal/core/router"
 	"github.com/pingostack/neon/internal/httpserv"
+	"github.com/pion/webrtc/v4"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -60,6 +60,7 @@ func (ss *SignalServer) handleRequest(gc *gin.Context) {
 		})
 		return
 	}
+
 }
 
 func (ss *SignalServer) handleRequestInternal(req Request, gc *gin.Context) error {
@@ -80,35 +81,24 @@ func (ss *SignalServer) handleRequestInternal(req Request, gc *gin.Context) erro
 }
 
 func (ss *SignalServer) publish(req Request, gc *gin.Context) error {
-	// parse sdp
-	sd := sdp.SessionDescription{}
-	if err := sd.Unmarshal([]byte(req.Data.SDP)); err != nil {
-		return err
+	src, err := NewFrameSource(ss.ctx, webrtc.SessionDescription{
+		Type: webrtc.SDPTypeOffer,
+		SDP:  req.Data.SDP,
+	}, ss.logger)
+
+	if err != nil {
+		return errors.Wrap(err, "failed to create frame source")
 	}
 
-	hasAudio := false
-	hasVideo := false
-	hasDataChannel := false
-	for _, mediaDesc := range sd.MediaDescriptions {
-		if mediaDesc.MediaName.Media == "audio" {
-			hasAudio = true
-		} else if mediaDesc.MediaName.Media == "video" {
-			hasVideo = true
-		} else if mediaDesc.MediaName.Media == "application" {
-			hasDataChannel = true
-		}
-	}
-
-	if !hasAudio && !hasVideo && !hasDataChannel {
-		return errors.New("no audio/video/datachannel")
-	}
+	ss.logger.WithField("metadata", src.Metadata().String()).Debug("frame source metadata")
 
 	// create session
 	peerID := req.Session
 	if peerID == "" {
 		peerID = guid.S()
 	}
-	pm := router.PeerMeta{
+
+	session := NewSession(ss.ctx, router.PeerParams{
 		RemoteAddr:     gc.Request.RemoteAddr,
 		LocalAddr:      gc.Request.Host,
 		PeerID:         peerID,
@@ -116,18 +106,38 @@ func (ss *SignalServer) publish(req Request, gc *gin.Context) error {
 		Domain:         gc.Request.Host,
 		URI:            gc.Request.URL.Path,
 		Producer:       true,
-		HasAudio:       hasAudio,
-		HasVideo:       hasVideo,
-		HasDataChannel: hasDataChannel,
+		HasAudio:       src.Metadata().HasAudio(),
+		HasVideo:       src.Metadata().HasVideo(),
+		HasDataChannel: src.Metadata().HasData(),
+	}, ss.logger)
+
+	err = session.BindFrameSource(src)
+	if err != nil {
+		return errors.Wrap(err, "failed to bind frame source")
 	}
 
-	session := NewSession(ss.ctx, pm, ss.logger)
-
-	err := session.Join()
+	err = session.Join()
 	if err != nil {
 		return errors.Wrap(err, "join failed")
 	}
 
+	answer := src.Answer()
+
+	resp := Response{
+		Version: req.Version,
+		Method:  req.Method,
+		Err:     0,
+		ErrMsg:  "",
+		Session: session.ID(),
+		Data: struct {
+			SDP string `json:"sdp"`
+		}{
+			SDP: answer.SDP,
+		},
+	}
+
+	ss.logger.WithField("answer", answer.SDP).Debug("resp answer")
+	gc.JSON(http.StatusOK, resp)
 	return nil
 }
 

@@ -12,5 +12,6 @@ var (
 	ErrProducerRepeated     = errors.New("producer repeated")
 	ErrStreamFormatNotFound = errors.New("stream format not found")
 	ErrStreamClosed         = errors.New("stream closed")
-	ErrStreamCodecMismatch  = errors.New("stream codec mismatch")
+	ErrNilFrameDestination  = errors.New("nil frame destination")
+	ErrNilFrameSource       = errors.New("nil frame source")
 )

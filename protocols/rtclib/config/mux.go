@@ -6,8 +6,8 @@ import (
 
 	"github.com/livekit/mediatransportutil/pkg/transport"
 	"github.com/pingostack/neon/pkg/logger"
-	"github.com/pion/ice/v2"
-	"github.com/pion/webrtc/v3"
+	"github.com/pion/ice/v3"
+	"github.com/pion/webrtc/v4"
 )
 
 func getICEUDPMux(settings *Settings, se *webrtc.SettingEngine, ipFilter func(net.IP) bool, ifFilter func(string) bool) (udpMux ice.UDPMux, err error) {

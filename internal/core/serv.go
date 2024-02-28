@@ -37,12 +37,12 @@ func NewServ(ctx context.Context, params router.NSManagerParams) *serv {
 }
 
 func (s *serv) join(session router.Session) error {
-	ns, _ := s.NSManager.GetOrNewNamespace(s.ctx, session.PeerMeta().Domain)
-	r, _ := ns.GetOrNewRouter(session.PeerMeta().RouterID)
+	ns, _ := s.NSManager.GetOrNewNamespace(s.ctx, session.PeerParams().Domain)
+	r, _ := ns.GetOrNewRouter(session.PeerParams().RouterID)
 	err := r.AddSession(session)
 	if err == router.ErrRouterClosed {
 		ns.RemoveRouter(r)
-		r, _ = ns.GetOrNewRouter(session.PeerMeta().RouterID)
+		r, _ = ns.GetOrNewRouter(session.PeerParams().RouterID)
 		err = r.AddSession(session)
 		if err != nil {
 			return err
@@ -58,24 +58,24 @@ func (s *serv) join(session router.Session) error {
 }
 
 func (s *serv) Join(ctx context.Context, session router.Session) error {
-	h := func(ctx context.Context, req middleware.Request) (interface{}, error) {
-		err := s.join(session)
-		if err != nil {
-			return nil, err
-		}
-
-		return nil, nil
+	//	h := func(ctx context.Context, req middleware.Request) (interface{}, error) {
+	err := s.join(session)
+	if err != nil {
+		return err
 	}
 
-	if next := s.middleware.Match("join"); len(next) > 0 {
-		_, err := middleware.Chain(next...)(h)(ctx, middleware.Request{
-			Operation: middleware.OperationJoin,
-			Params:    session,
-		})
-		if err != nil {
-			return err
-		}
-	}
+	// 	return nil, nil
+	// }
+
+	// if next := s.middleware.Match("join"); len(next) > 0 {
+	// 	_, err := middleware.Chain(next...)(h)(ctx, middleware.Request{
+	// 		Operation: middleware.OperationJoin,
+	// 		Params:    session,
+	// 	})
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// }
 
 	return nil
 }

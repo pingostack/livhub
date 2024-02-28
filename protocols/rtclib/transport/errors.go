@@ -1,4 +1,4 @@
-package err
+package transport
 
 import "errors"
 
@@ -9,4 +9,5 @@ var (
 	ErrNoICETransport  = errors.New("no ICE transport")
 	ErrNoAnswer        = errors.New("no answer")
 	ErrICETimeout      = errors.New("ice timeout")
+	ErrPanics          = errors.New("panics")
 )

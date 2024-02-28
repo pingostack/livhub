@@ -18,39 +18,53 @@ type FrameSourceDeliver interface {
 type FrameSource interface {
 	FrameSourceDeliver
 	FrameSourceReceiver
+	DestinationCount() int
 	AddAudioDestination(dest FrameDestination) error
 	AddVideoDestination(dest FrameDestination) error
 	AddDataDestination(dest FrameDestination) error
 	RemoveAudioDestination(dest FrameDestination) error
 	RemoveVideoDestination(dest FrameDestination) error
 	RemoveDataDestination(dest FrameDestination) error
-	SourceAudioCodec() FrameCodec
-	SourceVideoCodec() FrameCodec
+	SourceAudioCodec() CodecType
+	SourceVideoCodec() CodecType
 	SourcePacketType() PacketType
 	FrameSourceClose()
 }
 
-type FrameSourceImpl struct {
-	audioDests []FrameDestination
-	videoDests []FrameDestination
-	dataDests  []FrameDestination
-	lock       sync.RWMutex
-	audioCodec FrameCodec
-	videoCodec FrameCodec
-	packetType PacketType
-	ctx        context.Context
-	cancel     context.CancelFunc
-	closed     bool
+type DestinationInfo struct {
+	HasAudio bool
+	HasVideo bool
+	HasData  bool
 }
 
-func NewFrameSourceImpl(ctx context.Context, audioCodec FrameCodec, videoCodec FrameCodec, packetType PacketType) FrameSource {
+type FrameSourceImpl struct {
+	audioDests     []FrameDestination
+	videoDests     []FrameDestination
+	dataDests      []FrameDestination
+	audioDestIndex map[FrameDestination]FrameDestination
+	videoDestIndex map[FrameDestination]FrameDestination
+	dataDestIndex  map[FrameDestination]FrameDestination
+	destStatistics map[FrameDestination]*DestinationInfo
+	lock           sync.RWMutex
+	acodec         CodecType
+	vcodec         CodecType
+	packetType     PacketType
+	ctx            context.Context
+	cancel         context.CancelFunc
+	closed         bool
+}
+
+func NewFrameSourceImpl(ctx context.Context, acodec CodecType, vcodec CodecType, packetType PacketType) FrameSource {
 	fs := &FrameSourceImpl{
-		audioCodec: audioCodec,
-		videoCodec: videoCodec,
-		packetType: packetType,
-		audioDests: make([]FrameDestination, 0),
-		videoDests: make([]FrameDestination, 0),
-		dataDests:  make([]FrameDestination, 0),
+		acodec:         acodec,
+		vcodec:         vcodec,
+		packetType:     packetType,
+		audioDests:     make([]FrameDestination, 0),
+		videoDests:     make([]FrameDestination, 0),
+		dataDests:      make([]FrameDestination, 0),
+		audioDestIndex: make(map[FrameDestination]FrameDestination),
+		videoDestIndex: make(map[FrameDestination]FrameDestination),
+		dataDestIndex:  make(map[FrameDestination]FrameDestination),
 	}
 
 	fs.ctx, fs.cancel = context.WithCancel(ctx)
@@ -84,6 +98,9 @@ func NewFrameSourceImpl(ctx context.Context, audioCodec FrameCodec, videoCodec F
 		fs.audioDests = nil
 		fs.videoDests = nil
 		fs.dataDests = nil
+		fs.audioDestIndex = nil
+		fs.videoDestIndex = nil
+		fs.dataDestIndex = nil
 	}()
 
 	return fs
@@ -99,8 +116,25 @@ func (fs *FrameSourceImpl) AddAudioDestination(dest FrameDestination) error {
 		return ErrFrameSourceClosed
 	}
 
+	if fs.acodec != dest.DestinationAudioCodec() {
+		return ErrCodecNotSupported
+	}
+
+	if _, ok := fs.audioDestIndex[dest]; ok {
+		return ErrFrameDestinationExists
+	}
+
+	if info, ok := fs.destStatistics[dest]; ok {
+		info.HasAudio = true
+	} else {
+		fs.destStatistics[dest] = &DestinationInfo{
+			HasAudio: true,
+		}
+	}
+
 	dest.SetAudioSource(fs)
 	fs.audioDests = append(fs.audioDests, dest)
+	fs.audioDestIndex[dest] = dest
 
 	return nil
 }
@@ -123,6 +157,9 @@ func (fs *FrameSourceImpl) RemoveAudioDestination(dest FrameDestination) error {
 		}
 	}
 
+	delete(fs.destStatistics, dest)
+	delete(fs.audioDestIndex, dest)
+
 	return nil
 }
 
@@ -136,8 +173,24 @@ func (fs *FrameSourceImpl) AddVideoDestination(dest FrameDestination) error {
 		return ErrFrameSourceClosed
 	}
 
+	if fs.vcodec != dest.DestinationVideoCodec() {
+		return ErrCodecNotSupported
+	}
+
+	if _, ok := fs.videoDestIndex[dest]; ok {
+		return ErrFrameDestinationExists
+	}
+
 	dest.SetVideoSource(fs)
 	fs.videoDests = append(fs.videoDests, dest)
+	fs.videoDestIndex[dest] = dest
+	if info, ok := fs.destStatistics[dest]; ok {
+		info.HasVideo = true
+	} else {
+		fs.destStatistics[dest] = &DestinationInfo{
+			HasVideo: true,
+		}
+	}
 
 	return nil
 }
@@ -160,6 +213,9 @@ func (fs *FrameSourceImpl) RemoveVideoDestination(dest FrameDestination) error {
 		}
 	}
 
+	delete(fs.videoDestIndex, dest)
+	delete(fs.destStatistics, dest)
+
 	return nil
 }
 
@@ -173,8 +229,21 @@ func (fs *FrameSourceImpl) AddDataDestination(dest FrameDestination) error {
 		return ErrFrameSourceClosed
 	}
 
+	if _, ok := fs.dataDestIndex[dest]; ok {
+		return ErrFrameDestinationExists
+	}
+
 	dest.SetDataSource(fs)
 	fs.dataDests = append(fs.dataDests, dest)
+	fs.dataDestIndex[dest] = dest
+
+	if info, ok := fs.destStatistics[dest]; ok {
+		info.HasData = true
+	} else {
+		fs.destStatistics[dest] = &DestinationInfo{
+			HasData: true,
+		}
+	}
 
 	return nil
 }
@@ -196,6 +265,9 @@ func (fs *FrameSourceImpl) RemoveDataDestination(dest FrameDestination) error {
 			break
 		}
 	}
+
+	delete(fs.dataDestIndex, dest)
+	delete(fs.destStatistics, dest)
 
 	return nil
 }
@@ -262,29 +334,33 @@ func (fs *FrameSourceImpl) DeliverMetaData(metadata Metadata) error {
 		return ErrFrameSourceClosed
 	}
 
-	if m, ok := metadata.(AudioMetadata); ok {
+	if metadata.Audio != nil {
 		for _, d := range fs.audioDests {
-			d.OnAudioMetaData(m)
+			d.OnAudioMetaData(metadata.Audio)
 		}
-	} else if m, ok := metadata.(VideoMetadata); ok {
+	}
+
+	if metadata.Video != nil {
 		for _, d := range fs.videoDests {
-			d.OnVideoMetaData(m)
+			d.OnVideoMetaData(metadata.Video)
 		}
-	} else if m, ok := metadata.(DataMetadata); ok {
+	}
+
+	if metadata.Data != nil {
 		for _, d := range fs.dataDests {
-			d.OnDataMetaData(m)
+			d.OnDataMetaData(metadata.Data)
 		}
 	}
 
 	return nil
 }
 
-func (fs *FrameSourceImpl) SourceAudioCodec() FrameCodec {
-	return fs.audioCodec
+func (fs *FrameSourceImpl) SourceAudioCodec() CodecType {
+	return fs.acodec
 }
 
-func (fs *FrameSourceImpl) SourceVideoCodec() FrameCodec {
-	return fs.videoCodec
+func (fs *FrameSourceImpl) SourceVideoCodec() CodecType {
+	return fs.vcodec
 }
 
 func (fs *FrameSourceImpl) SourcePacketType() PacketType {
@@ -293,4 +369,13 @@ func (fs *FrameSourceImpl) SourcePacketType() PacketType {
 
 func (fs *FrameSourceImpl) FrameSourceClose() {
 	fs.cancel()
+}
+
+func (fs *FrameSourceImpl) DestinationCount() int {
+	fs.lock.RLock()
+	defer func() {
+		fs.lock.RUnlock()
+	}()
+
+	return len(fs.destStatistics)
 }

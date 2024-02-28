@@ -7,6 +7,7 @@ import (
 	"github.com/pingostack/neon/apps/pms"
 	"github.com/pingostack/neon/apps/whip"
 	"github.com/pingostack/neon/internal/core"
+	"github.com/pingostack/neon/internal/rtc"
 	"github.com/sirupsen/logrus"
 )
 
@@ -15,6 +16,7 @@ func serv(ctx context.Context) {
 	gomodule.RegisterWithName(whip.WhipModule(), "whip")
 	gomodule.RegisterWithName(pms.PMSModule(), "pms")
 	gomodule.RegisterWithName(core.CoreModule(), "core")
+	gomodule.RegisterWithName(rtc.RtcModule(), "webrtc")
 	gomodule.Launch(ctx)
 
 	gomodule.Wait()

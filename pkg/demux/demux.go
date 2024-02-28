@@ -17,9 +17,9 @@ type NoopDemux struct {
 	deliver.MediaFrameMulticaster
 }
 
-func NewNoopDemux(ctx context.Context, audioCodec, videoCodec deliver.FrameCodec, inPacketType deliver.PacketType) *NoopDemux {
+func NewNoopDemux(ctx context.Context, acodec, vcodec deliver.CodecType, inPacketType deliver.PacketType) *NoopDemux {
 	return &NoopDemux{
-		MediaFrameMulticaster: deliver.NewMediaFrameMulticaster(ctx, audioCodec, videoCodec, inPacketType, inPacketType),
+		MediaFrameMulticaster: deliver.NewMediaFrameMulticaster(ctx, acodec, vcodec, inPacketType, inPacketType),
 	}
 }
 

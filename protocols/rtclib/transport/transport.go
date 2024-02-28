@@ -13,11 +13,10 @@ import (
 	"github.com/pingostack/neon/pkg/eventemitter"
 	"github.com/pingostack/neon/pkg/logger"
 	"github.com/pingostack/neon/protocols/rtclib/config"
-	"github.com/pingostack/neon/protocols/rtclib/err"
+	"github.com/pingostack/neon/protocols/rtclib/sdpassistor"
 	"github.com/pion/dtls/v2/pkg/crypto/elliptic"
 	"github.com/pion/interceptor"
-	"github.com/pion/sdp/v3"
-	"github.com/pion/webrtc/v3"
+	"github.com/pion/webrtc/v4"
 	"github.com/pkg/errors"
 	"go.uber.org/atomic"
 )
@@ -114,15 +113,13 @@ func NewTransport(opts ...TransportOpt) (*Transport, error) {
 		}
 	})
 
-	t.PeerConnection.OnICEGatheringStateChange(func(state webrtc.ICEGathererState) {
+	t.PeerConnection.OnICEGatheringStateChange(func(state webrtc.ICEGatheringState) {
 		t.logger.Debugf("ICE gathering state changed: %s", state.String())
-
-		if state != webrtc.ICEGathererStateComplete {
-			return
-		}
-
-		if t.onICEGathererStateComplete != nil {
-			t.onICEGathererStateComplete()
+		if state == webrtc.ICEGatheringStateComplete {
+			t.eventemitter.EmitEvent(signalICEGatheringComplete, nil)
+			if t.onICEGathererStateComplete != nil {
+				t.onICEGathererStateComplete()
+			}
 		}
 	})
 
@@ -283,17 +280,17 @@ func (t *Transport) handleConnectionFailed(forceShortConn bool) {
 func (t *Transport) getSelectedPair() (*webrtc.ICECandidatePair, error) {
 	sctp := t.PeerConnection.SCTP()
 	if sctp == nil {
-		return nil, err.ErrEventNoSCTP
+		return nil, ErrEventNoSCTP
 	}
 
 	dtlsTransport := sctp.Transport()
 	if dtlsTransport == nil {
-		return nil, err.ErrNoDTLSTransport
+		return nil, ErrNoDTLSTransport
 	}
 
 	iceTransport := dtlsTransport.ICETransport()
 	if iceTransport == nil {
-		return nil, err.ErrNoICETransport
+		return nil, ErrNoICETransport
 	}
 
 	return iceTransport.GetSelectedCandidatePair()
@@ -532,55 +529,13 @@ func (t *Transport) ResetShortConnOnICERestart() {
 func (t *Transport) EnableRemoteCandidates() error {
 	for _, c := range t.pendingRemoteCandidates {
 		if e := t.PeerConnection.AddICECandidate(*c); e != nil {
-			return errors.Wrap(err.ErrAddIceCandidate, e.Error())
+			return errors.Wrap(ErrAddIceCandidate, e.Error())
 		}
 	}
 
 	t.pendingRemoteCandidates = nil
 
 	return nil
-}
-
-func (t *Transport) filterCandidates(sd webrtc.SessionDescription) (webrtc.SessionDescription, error) {
-	preferTCP := t.preferTCP.Load()
-
-	parsedSdp, err := sd.Unmarshal()
-	if err != nil {
-		return sd, fmt.Errorf("could not unmarshal sdp, %v", err)
-	}
-
-	filterAttributes := func(attrs []sdp.Attribute) []sdp.Attribute {
-		var filteredAttrs []sdp.Attribute
-		for _, attr := range attrs {
-			if attr.Key != sdp.AttrKeyCandidate {
-				filteredAttrs = append(filteredAttrs, attr)
-				continue
-			}
-
-			if preferTCP && strings.Contains(attr.Value, "udp") {
-				continue
-			}
-
-			filteredAttrs = append(filteredAttrs, attr)
-		}
-
-		return filteredAttrs
-	}
-
-	parsedSdp.Attributes = filterAttributes(parsedSdp.Attributes)
-	for _, media := range parsedSdp.MediaDescriptions {
-		media.Attributes = filterAttributes(media.Attributes)
-	}
-
-	sdpBytes, err := parsedSdp.Marshal()
-	if err != nil {
-		return sd, fmt.Errorf("could not marshal sdp, %s", err)
-	}
-
-	return webrtc.SessionDescription{
-		Type: sd.Type,
-		SDP:  string(sdpBytes),
-	}, nil
 }
 
 func (t *Transport) handleCloseTransport(data interface{}) {
@@ -663,35 +618,48 @@ func (t *Transport) validate() error {
 	return nil
 }
 
-func (t *Transport) SetRemoteDescription(sd webrtc.SessionDescription) error {
-	if _, err := t.filterCandidates(sd); err != nil {
-		return err
-	}
-
-	if err := t.PeerConnection.SetRemoteDescription(sd); err != nil {
-		return errors.Wrap(err, "failed to set remote description")
-	}
-
+func (t *Transport) SetRemoteDescription(sd webrtc.SessionDescription) (answer webrtc.SessionDescription, err error) {
 	if sd.Type == webrtc.SDPTypeOffer {
-		answer, err := t.PeerConnection.CreateAnswer(nil)
+		if err = t.PeerConnection.SetRemoteDescription(sd); err != nil {
+			err = errors.Wrap(err, "failed to set remote description")
+			return
+		}
+
+		answer, err = t.PeerConnection.CreateAnswer(nil)
 		if err != nil {
-			return errors.Wrap(err, "failed to create answer")
+			err = errors.Wrap(err, "failed to create answer")
+			return
 		}
 
-		if _, err := t.filterCandidates(answer); err != nil {
-			return err
-		}
-
-		if err := t.PeerConnection.SetLocalDescription(answer); err != nil {
-			return errors.Wrap(err, "failed to set local description")
+		if err = t.PeerConnection.SetLocalDescription(answer); err != nil {
+			err = errors.Wrap(err, "failed to set local description")
+			return
 		}
 	} else {
-		if err := t.PeerConnection.SetRemoteDescription(sd); err != nil {
-			return errors.Wrap(err, "failed to set remote description")
+		if err = t.PeerConnection.SetRemoteDescription(sd); err != nil {
+			err = errors.Wrap(err, "failed to set remote description")
+			return
 		}
 	}
 
-	return nil
+	gatherComplete := webrtc.GatheringCompletePromise(t.PeerConnection)
+	<-gatherComplete
+
+	localSdp := t.PeerConnection.LocalDescription()
+	if localSdp == nil {
+		err = errors.New("local description is nil")
+		return
+	}
+
+	filter := sdpassistor.NewSdpFilter(t.preferTCP.Load(), true)
+
+	answer, err = filter.Filter(*localSdp)
+	if err != nil {
+		err = errors.Wrap(err, "failed to filter sdp")
+		return
+	}
+
+	return
 }
 
 func (t *Transport) Context() context.Context {

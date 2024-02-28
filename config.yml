@@ -38,26 +38,17 @@ pms: {
 }
 
 webrtc: {
-    trackingPackets: 500,
-    maxBitRate: 10000000,
-    singleport: 5000,
-    portrange: [1937, 1938],
-    candidates: {
-      icelite: true,
-      nat1to1: [],
-    },
-    sdpsemantics: "unified-plan-with-fallback",
-    mdns: true,
-    timeouts: {
-      disconnected: 5,
-      failed: 20,
-      keepalive: 2,
-    },
-    iceserver: {
-      urls: ["stun:stun.l.google.com:19302"],
-      username: "",
-      credential: "",
-    }
+  default: {
+    useIceLite: true,
+    nat1to1Ips: ["127.0.0.1", "192.168.100.253", "169.254.176.67"],
+    #nat1to1Ips: ["127.0.0.1/127.0.0.1", "192.168.100.253/192.168.100.253", "169.254.176.67/169.254.176.67"],
+    autoGenerateExternalIp: false,
+  #  icePortRange: "7300-7400",
+    udpMuxPort: "8888-8888",
+  #  tcpPort: 8888,
+    stunServers: ["stun:stun.l.google.com:19302"],
+    useMdns: true,
+  }
 }
 
 rtsp: {

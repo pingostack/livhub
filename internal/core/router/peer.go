@@ -3,12 +3,14 @@ package router
 import (
 	"context"
 
-	"github.com/pingostack/neon/pkg/eventemitter"
-	"github.com/pingostack/neon/pkg/streaminterceptor"
+	"github.com/pingostack/neon/pkg/deliver"
 	"github.com/sirupsen/logrus"
 )
 
-type PeerMeta struct {
+type PeerParams struct {
+	ACodec         deliver.CodecType  `json:"audio_codec"`
+	VCodec         deliver.CodecType  `json:"video_codec"`
+	PacketType     deliver.PacketType `json:"packet_type"`
 	RemoteAddr     string
 	LocalAddr      string
 	PeerID         string
@@ -23,10 +25,7 @@ type PeerMeta struct {
 }
 
 type Session interface {
-	eventemitter.EventEmitter
-	streaminterceptor.Reader
 	ID() string
-	RouterID() string
 	Set(key, value interface{})
 	Get(key interface{}) interface{}
 	Logger() *logrus.Entry
@@ -35,7 +34,12 @@ type Session interface {
 	SetNamespace(ns *Namespace)
 	GetRouter() Router
 	SetRouter(r Router)
-	PeerMeta() PeerMeta
+	PeerParams() PeerParams
 	Finalize(e error)
+	RouterID() string
+	BindFrameSource(src deliver.FrameSource) error
+	BindFrameDestination(dest deliver.FrameDestination) error
+	FrameSource() deliver.FrameSource
+	FrameDestination() deliver.FrameDestination
 	Join() error
 }

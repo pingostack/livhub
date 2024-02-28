@@ -8,9 +8,9 @@ import (
 
 type FrameDestinationReceiver interface {
 	OnFrame(frame Frame, attr Attributes)
-	OnAudioMetaData(metadata AudioMetadata)
-	OnVideoMetaData(metadata VideoMetadata)
-	OnDataMetaData(metadata DataMetadata)
+	OnAudioMetaData(metadata *AudioMetadata)
+	OnVideoMetaData(metadata *VideoMetadata)
+	OnDataMetaData(metadata *DataMetadata)
 }
 
 type FrameDestinationDeliver interface {
@@ -26,8 +26,8 @@ type FrameDestination interface {
 	unsetAudioSource()
 	unsetVideoSource()
 	unsetDataSource()
-	DestinationAudioCodec() FrameCodec
-	DestinationVideoCodec() FrameCodec
+	DestinationAudioCodec() CodecType
+	DestinationVideoCodec() CodecType
 	DestinationPacketType() PacketType
 	FrameDestinationClose()
 }
@@ -37,18 +37,18 @@ type FrameDestinationImpl struct {
 	videoSrc   FrameSource
 	dataSrc    FrameSource
 	lock       sync.RWMutex
-	audioCodec FrameCodec
-	videoCodec FrameCodec
+	acodec     CodecType
+	vcodec     CodecType
 	packetType PacketType
 	ctx        context.Context
 	cancel     context.CancelFunc
 	closed     bool
 }
 
-func NewFrameDestinationImpl(ctx context.Context, audioCodec, videoCodec FrameCodec, packetType PacketType) FrameDestination {
+func NewFrameDestinationImpl(ctx context.Context, acodec, vcodec CodecType, packetType PacketType) FrameDestination {
 	fd := &FrameDestinationImpl{
-		audioCodec: audioCodec,
-		videoCodec: videoCodec,
+		acodec:     acodec,
+		vcodec:     vcodec,
 		packetType: packetType,
 	}
 
@@ -187,21 +187,21 @@ func (fd *FrameDestinationImpl) DeliverFeedback(fb FeedbackMsg) error {
 func (fd *FrameDestinationImpl) OnData(data []byte, attr Attributes) {
 }
 
-func (fd *FrameDestinationImpl) OnAudioMetaData(metadata AudioMetadata) {
+func (fd *FrameDestinationImpl) OnAudioMetaData(metadata *AudioMetadata) {
 }
 
-func (fd *FrameDestinationImpl) OnVideoMetaData(metadata VideoMetadata) {
+func (fd *FrameDestinationImpl) OnVideoMetaData(metadata *VideoMetadata) {
 }
 
-func (fd *FrameDestinationImpl) OnDataMetaData(metadata DataMetadata) {
+func (fd *FrameDestinationImpl) OnDataMetaData(metadata *DataMetadata) {
 }
 
-func (fd *FrameDestinationImpl) DestinationAudioCodec() FrameCodec {
-	return fd.audioCodec
+func (fd *FrameDestinationImpl) DestinationAudioCodec() CodecType {
+	return fd.acodec
 }
 
-func (fd *FrameDestinationImpl) DestinationVideoCodec() FrameCodec {
-	return fd.videoCodec
+func (fd *FrameDestinationImpl) DestinationVideoCodec() CodecType {
+	return fd.vcodec
 }
 
 func (fd *FrameDestinationImpl) DestinationPacketType() PacketType {

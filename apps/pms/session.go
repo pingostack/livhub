@@ -12,7 +12,7 @@ type Session struct {
 	router.Session
 }
 
-func NewSession(ctx context.Context, pm router.PeerMeta, logger *logrus.Entry) *Session {
+func NewSession(ctx context.Context, pm router.PeerParams, logger *logrus.Entry) *Session {
 	s := &Session{
 		Session: core.NewSession(ctx, pm, logger),
 	}

@@ -73,6 +73,8 @@ func (r *RouterImpl) addProducer(session Session) error {
 
 	r.producer = session
 
+	r.stream.SetFrameSource(session.FrameSource())
+
 	go r.waitSessionDone(session)
 
 	return nil
@@ -92,13 +94,15 @@ func (r *RouterImpl) addSubscriber(session Session) error {
 
 	r.subscribers[session.ID()] = session
 
+	r.stream.AddFrameDestination(session.FrameDestination())
+
 	go r.waitSessionDone(session)
 
 	return nil
 }
 
 func (r *RouterImpl) AddSession(session Session) error {
-	if session.PeerMeta().Producer {
+	if session.PeerParams().Producer {
 		return r.addProducer(session)
 	} else {
 		return r.addSubscriber(session)
@@ -143,7 +147,7 @@ func (r *RouterImpl) waitSessionDone(s Session) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	if s.PeerMeta().Producer {
+	if s.PeerParams().Producer {
 		r.producer = nil
 		r.logger.Infof("producer %s removed", s.ID())
 		if len(r.subscribers) > 0 {

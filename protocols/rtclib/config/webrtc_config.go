@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/pingostack/neon/pkg/logger"
-	"github.com/pion/ice/v2"
-	"github.com/pion/webrtc/v3"
+	"github.com/pion/ice/v3"
+	"github.com/pion/webrtc/v4"
 )
 
 type WebRTCConfig struct {
@@ -61,7 +61,7 @@ func NewWebRTCConfig(settings *Settings) (*WebRTCConfig, error) {
 		}
 		nat1to1IPs = append(nat1to1IPs, externalNat1to1IPs...)
 		nat1to1IPs = append(nat1to1IPs, localNat1to1IPs...)
-		nat1to1IPs = append(nat1to1IPs, settings.NAT1To1IPs...)
+		nat1to1IPs = append(nat1to1IPs, validateNat1to1IPs(settings.NAT1To1IPs)...)
 		natMapping := make(map[string]string)
 		for _, ip := range nat1to1IPs {
 			values := strings.Split(ip, "/")
@@ -83,7 +83,8 @@ func NewWebRTCConfig(settings *Settings) (*WebRTCConfig, error) {
 		logger.Infof("auto generated nat1to1 ips: %v", nat1to1IPs)
 		se.SetNAT1To1IPs(nat1to1IPs, webrtc.ICECandidateTypeHost)
 	} else if len(settings.NAT1To1IPs) > 0 {
-		nat1to1IPs = settings.NAT1To1IPs
+		nat1to1IPs = validateNat1to1IPs(settings.NAT1To1IPs)
+		logger.Infof("nat1to1 ips: %v", nat1to1IPs)
 		se.SetNAT1To1IPs(nat1to1IPs, webrtc.ICECandidateTypeHost)
 	} else {
 		if len(settings.STUNServers) > 0 {
@@ -93,9 +94,7 @@ func NewWebRTCConfig(settings *Settings) (*WebRTCConfig, error) {
 		}
 	}
 
-	if settings.UseICELite {
-		se.SetLite(true)
-	}
+	se.SetLite(settings.UseICELite)
 
 	var udpMux ice.UDPMux
 	var err error
@@ -158,6 +157,29 @@ func NewWebRTCConfig(settings *Settings) (*WebRTCConfig, error) {
 		NAT1To1IPs:     nat1to1IPs,
 		UseMDNS:        settings.UseMDNS,
 	}, nil
+}
+
+func validateNat1to1IPs(ips []string) []string {
+	var validIPs []string
+	natMapping := make(map[string]string)
+	for _, ip := range ips {
+		values := strings.Split(ip, "/")
+		if len(values) != 1 && len(values) != 2 {
+			continue
+		}
+		if len(values) == 1 {
+			natMapping[values[0]] = values[0]
+		} else {
+			natMapping[values[0]] = values[1]
+		}
+	}
+
+	for external, local := range natMapping {
+		validIPs = append(validIPs, fmt.Sprintf("%s/%s", external, local))
+	}
+
+	logger.Infof("auto generated nat1to1 ips: %v", validIPs)
+	return validIPs
 }
 
 func iceServerForStunServers(servers []string) webrtc.ICEServer {

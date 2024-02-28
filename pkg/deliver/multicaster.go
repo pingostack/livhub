@@ -13,10 +13,10 @@ type MediaFrameMulticasterImpl struct {
 	FrameSource
 }
 
-func NewMediaFrameMulticaster(ctx context.Context, audioCodec FrameCodec, videoCodec FrameCodec, inPacketType, outPacketType PacketType) MediaFrameMulticaster {
+func NewMediaFrameMulticaster(ctx context.Context, acodec CodecType, vcodec CodecType, inPacketType, outPacketType PacketType) MediaFrameMulticaster {
 	m := &MediaFrameMulticasterImpl{
-		FrameSource:      NewFrameSourceImpl(ctx, audioCodec, videoCodec, inPacketType),
-		FrameDestination: NewFrameDestinationImpl(ctx, audioCodec, videoCodec, outPacketType),
+		FrameSource:      NewFrameSourceImpl(ctx, acodec, vcodec, inPacketType),
+		FrameDestination: NewFrameDestinationImpl(ctx, acodec, vcodec, outPacketType),
 	}
 
 	return m
