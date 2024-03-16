@@ -1,10 +1,10 @@
 package streaminterceptor
 
 type Registry struct {
-	factories []Factory
+	factories []StreamFactory
 }
 
-func (r *Registry) Add(f Factory) {
+func (r *Registry) Add(f StreamFactory) {
 	r.factories = append(r.factories, f)
 }
 

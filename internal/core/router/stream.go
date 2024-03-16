@@ -141,17 +141,17 @@ func addFrameDestination(src deliver.FrameSource, dest deliver.FrameDestination)
 func (s *StreamImpl) linkSrcToDest(src deliver.FrameSource, dest deliver.FrameDestination) error {
 	var fmt StreamFormat
 	if !needDemux(src, dest) {
-		fmt = NewStreamFormat(s.ctx, dest.DestinationAudioCodec(), dest.DestinationVideoCodec(), dest.DestinationPacketType())
+		//fmt = NewStreamFormat(s.ctx, dest.DestinationAudioCodec(), dest.DestinationVideoCodec(), dest.DestinationPacketType())
 
 		if err := addFrameDestination(src, dest); err != nil {
-			fmt.Close()
+			//			fmt.Close()
 			return err
 		}
-		s.fmts[fmt.PacketType().String()] = fmt
+		// s.fmts[fmt.PacketType().String()] = fmt
 
-		if err := fmt.AddDestination(dest); err != nil {
-			return err
-		}
+		// if err := fmt.AddDestination(dest); err != nil {
+		// 	return err
+		// }
 
 		return nil
 	}
@@ -283,6 +283,8 @@ func (s *StreamImpl) SetFrameSource(src deliver.FrameSource) error {
 			continue
 		}
 	}
+
+	s.pendingDests = nil
 
 	return nil
 }

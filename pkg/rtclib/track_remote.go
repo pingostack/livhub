@@ -56,3 +56,7 @@ func (t *TrackRemote) IsAudio() bool {
 func (t *TrackRemote) IsVideo() bool {
 	return t.track.Kind() == webrtc.RTPCodecTypeVideo
 }
+
+func (t *TrackRemote) SSRC() webrtc.SSRC {
+	return t.track.SSRC()
+}

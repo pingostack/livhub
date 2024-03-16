@@ -31,10 +31,10 @@ const (
 )
 
 var (
-	signalLocalICECandidate    = eventemitter.GenEventId()
-	signalRemoteICECandidate   = eventemitter.GenEventId()
-	signalICEGatheringComplete = eventemitter.GenEventId()
-	signalCloseTransport       = eventemitter.GenEventId()
+	signalLocalICECandidate    = eventemitter.GenEventID()
+	signalRemoteICECandidate   = eventemitter.GenEventID()
+	signalICEGatheringComplete = eventemitter.GenEventID()
+	signalCloseTransport       = eventemitter.GenEventID()
 )
 
 type TransportOpt func(t *Transport)
@@ -72,6 +72,7 @@ type Transport struct {
 	onICEGathererStateComplete func()
 	resetShortConnOnICERestart atomic.Bool
 	pendingRemoteCandidates    []*webrtc.ICECandidateInit
+	payloadUnion               *sdpassistor.PayloadUnion
 }
 
 func NewTransport(opts ...TransportOpt) (*Transport, error) {
@@ -619,20 +620,26 @@ func (t *Transport) validate() error {
 	return nil
 }
 
-func (t *Transport) SetRemoteDescription(sd webrtc.SessionDescription) (answer webrtc.SessionDescription, err error) {
+func (t *Transport) SetRemoteDescription(sd webrtc.SessionDescription) (lsdp webrtc.SessionDescription, err error) {
+	sd, err = sdpassistor.FilterCandidates(sd, t.preferTCP.Load())
+	if err != nil {
+		err = errors.Wrap(err, "failed to filter sdp")
+		return lsdp, err
+	}
+
 	if sd.Type == webrtc.SDPTypeOffer {
 		if err = t.PeerConnection.SetRemoteDescription(sd); err != nil {
 			err = errors.Wrap(err, "failed to set remote description")
 			return
 		}
 
-		answer, err = t.PeerConnection.CreateAnswer(nil)
+		lsdp, err = t.PeerConnection.CreateAnswer(nil)
 		if err != nil {
 			err = errors.Wrap(err, "failed to create answer")
 			return
 		}
 
-		if err = t.PeerConnection.SetLocalDescription(answer); err != nil {
+		if err = t.PeerConnection.SetLocalDescription(lsdp); err != nil {
 			err = errors.Wrap(err, "failed to set local description")
 			return
 		}
@@ -652,14 +659,12 @@ func (t *Transport) SetRemoteDescription(sd webrtc.SessionDescription) (answer w
 		return
 	}
 
-	filter := sdpassistor.NewSdpFilter(t.preferTCP.Load(), true)
-
-	t.logger.Debugf("Filtering SDP: %s", localSdp.SDP)
-	answer, err = filter.Filter(*localSdp)
+	t.payloadUnion, err = sdpassistor.NewPayloadUnion(lsdp)
 	if err != nil {
-		err = errors.Wrap(err, "failed to filter sdp")
-		return
+		err = errors.Wrap(err, "failed to create metadata")
 	}
+
+	lsdp = *localSdp
 
 	return
 }
@@ -678,4 +683,8 @@ func (t *Transport) EventEmitter() eventemitter.EventEmitter {
 
 func (t *Transport) Finalize() {
 	t.eventemitter.EmitEvent(signalCloseTransport, nil)
+}
+
+func (t *Transport) PayloadUnion() *sdpassistor.PayloadUnion {
+	return t.payloadUnion
 }

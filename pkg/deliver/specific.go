@@ -174,12 +174,11 @@ func (vfsi *VideoFrameSpecificInfo) String() string {
 }
 
 type AudioFrameSpecificInfo struct {
-	IsRtpPacket bool   `json:"isRtpPacket"`
-	NbSamples   uint32 `json:"nbSamples"`
-	SampleRate  uint32 `json:"sampleRate"`
-	Channels    uint8  `json:"channels"`
-	Voice       uint8  `json:"voice"`
-	AudioLevel  uint8  `json:"audioLevel"`
+	NbSamples  uint32 `json:"nbSamples"`
+	SampleRate uint32 `json:"sampleRate"`
+	Channels   uint8  `json:"channels"`
+	Voice      uint8  `json:"voice"`
+	AudioLevel uint8  `json:"audioLevel"`
 }
 
 func (afsi *AudioFrameSpecificInfo) String() string {
@@ -195,35 +194,58 @@ type Frame struct {
 	Codec          CodecType
 	PacketType     PacketType
 	Payload        []byte
-	Length         uint32
+	RawPacket      interface{}
+	Length         int
 	TimeStamp      uint32
 	AdditionalInfo FrameSpecificInfo
 }
 
 type AudioMetadata struct {
-	Codec      CodecType
-	Type       PacketType
-	SampleRate int
-	Channels   int
+	Codec          string     `json:"codec"`
+	CodecType      CodecType  `json:"codecType"`
+	Type           PacketType `json:"type"`
+	SampleRate     uint32     `json:"sampleRate"`
+	Channels       uint8      `json:"channels"`
+	RtpPayloadType uint8      `json:"rtpPayloadType"`
 }
 
 type VideoMetadata struct {
-	Codec  CodecType
-	Type   PacketType
-	Width  int
-	Height int
-	FPS    int
+	Codec          string     `json:"codec"`
+	CodecType      CodecType  `json:"codecType"`
+	Type           PacketType `json:"type"`
+	Width          int        `json:"width"`
+	Height         int        `json:"height"`
+	FPS            int        `json:"fps"`
+	RtpPayloadType uint8      `json:"rtpPayloadType"`
 }
 
 type DataMetadata struct {
-	Codec CodecType
-	Type  PacketType
+	Codec string     `json:"codec"`
+	Type  PacketType `json:"type"`
 }
 
 type Metadata struct {
-	Audio *AudioMetadata
-	Video *VideoMetadata
-	Data  *DataMetadata
+	Audio      *AudioMetadata `json:"audio"`
+	Video      *VideoMetadata `json:"video"`
+	Data       *DataMetadata  `json:"data"`
+	PacketType PacketType     `json:"packetType"`
+}
+
+func (md *Metadata) String() string {
+	jstr, _ := json.Marshal(md)
+	return string(jstr)
+}
+
+func (md *Metadata) HasAudio() bool {
+	return md.Audio != nil
+}
+
+func (md *Metadata) HasVideo() bool {
+	return md.Video != nil
+}
+
+func (md *Metadata) HasData() bool {
+	return md.Data != nil
 }
 
 type FeedbackType int

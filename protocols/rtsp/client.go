@@ -101,7 +101,7 @@ func (c *Client) NewAnnounceRequest() *AnnounceRequest {
 	return req
 }
 
-func (c *Client) NewSetupRequest(trackId int, transport *Transport) *SetupRequest {
+func (c *Client) NewSetupRequest(trackID int, transport *Transport) *SetupRequest {
 	req := c.NewRequest("SETUP").Setup()
 	req.SetTransport(transport)
 

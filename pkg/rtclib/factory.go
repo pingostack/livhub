@@ -28,7 +28,7 @@ type LocalStreamParams struct {
 	PreferTCP    bool
 }
 
-type Factory interface {
+type StreamFactory interface {
 	NewRemoteStream(params RemoteStreamParams) (*RemoteStream, error)
 	NewLocalStream(params LocalStreamParams) (*LocalStream, error)
 }
@@ -38,7 +38,7 @@ type FactoryImpl struct {
 	webrtcConfig *config.WebRTCConfig
 }
 
-func NewTransportFactory(settings config.Settings) Factory {
+func NewTransportFactory(settings config.Settings) StreamFactory {
 	f := &FactoryImpl{
 		settings: settings,
 	}

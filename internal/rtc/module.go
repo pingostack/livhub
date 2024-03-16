@@ -24,7 +24,7 @@ type rtc struct {
 	settings         *rtcSettings
 	logger           *logrus.Entry
 	lock             sync.RWMutex
-	transportFactory rtclib.Factory
+	transportFactory rtclib.StreamFactory
 }
 
 func init() {
@@ -57,7 +57,7 @@ func (rtc *rtc) ConfigChanged() {
 func (rtc *rtc) ModuleRun() {
 }
 
-func (rtc *rtc) TransportFactory() rtclib.Factory {
+func (rtc *rtc) StreamFactory() rtclib.StreamFactory {
 	rtc.lock.RLock()
 	factory := rtc.transportFactory
 	if rtc.transportFactory == nil {
@@ -76,6 +76,6 @@ func (rtc *rtc) TransportFactory() rtclib.Factory {
 	return factory
 }
 
-func TransportFactory() rtclib.Factory {
-	return rtcModule.TransportFactory()
+func StreamFactory() rtclib.StreamFactory {
+	return rtcModule.StreamFactory()
 }

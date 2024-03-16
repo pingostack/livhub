@@ -65,6 +65,7 @@ func NewFrameSourceImpl(ctx context.Context, acodec CodecType, vcodec CodecType,
 		audioDestIndex: make(map[FrameDestination]FrameDestination),
 		videoDestIndex: make(map[FrameDestination]FrameDestination),
 		dataDestIndex:  make(map[FrameDestination]FrameDestination),
+		destStatistics: make(map[FrameDestination]*DestinationInfo),
 	}
 
 	fs.ctx, fs.cancel = context.WithCancel(ctx)

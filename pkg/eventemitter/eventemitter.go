@@ -9,26 +9,26 @@ import (
 	"go.uber.org/atomic"
 )
 
-type eventId int
+type eventID int
 
 type EventEmitter interface {
-	AddEvent(eventId eventId, f func(data interface{}))
-	EmitEvent(eventId eventId, data interface{}) error
+	AddEvent(eventID eventID, f func(data interface{}))
+	EmitEvent(eventID eventID, data interface{}) error
 }
 
 type Event struct {
-	Signal eventId
+	Signal eventID
 	Data   interface{}
 }
 
 func (e Event) String() string {
-	return fmt.Sprintf("{eventId: %d, data: %+v}", e.Signal, e.Data)
+	return fmt.Sprintf("{eventID: %d, data: %+v}", e.Signal, e.Data)
 }
 
 type EventEmitterImpl struct {
 	oneventLock sync.RWMutex
 	eventCh     chan Event
-	listeners   map[eventId][]func(data interface{})
+	listeners   map[eventID][]func(data interface{})
 	logger      logger.Logger
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -38,14 +38,14 @@ var (
 	signalCounter atomic.Int32
 )
 
-func GenEventId() eventId {
-	return eventId(signalCounter.Inc())
+func GenEventID() eventID {
+	return eventID(signalCounter.Inc())
 }
 
 func NewEventEmitter(ctx context.Context, size int, logger logger.Logger) EventEmitter {
 	m := &EventEmitterImpl{
 		eventCh:   make(chan Event, size),
-		listeners: make(map[eventId][]func(data interface{})),
+		listeners: make(map[eventID][]func(data interface{})),
 		logger:    logger,
 	}
 
@@ -56,7 +56,7 @@ func NewEventEmitter(ctx context.Context, size int, logger logger.Logger) EventE
 	return m
 }
 
-func (m *EventEmitterImpl) EmitEvent(eventId eventId, data interface{}) error {
+func (m *EventEmitterImpl) EmitEvent(eventID eventID, data interface{}) error {
 	defer func() {
 		if r := recover(); r != nil {
 			if m.logger != nil {
@@ -66,7 +66,7 @@ func (m *EventEmitterImpl) EmitEvent(eventId eventId, data interface{}) error {
 	}()
 
 	e := Event{
-		Signal: eventId,
+		Signal: eventID,
 		Data:   data,
 	}
 
@@ -115,25 +115,25 @@ func (m *EventEmitterImpl) run() {
 	}
 }
 
-func (m *EventEmitterImpl) AddEvent(eventId eventId, f func(data interface{})) {
+func (m *EventEmitterImpl) AddEvent(eventID eventID, f func(data interface{})) {
 	m.oneventLock.Lock()
 	defer m.oneventLock.Unlock()
 
-	listeners, found := m.listeners[eventId]
+	listeners, found := m.listeners[eventID]
 	if !found {
 		listeners = make([]func(data interface{}), 0)
 	}
 
 	listeners = append(listeners, f)
 
-	m.listeners[eventId] = listeners
+	m.listeners[eventID] = listeners
 }
 
-func (m *EventEmitterImpl) Remove(eventId eventId) {
+func (m *EventEmitterImpl) Remove(eventID eventID) {
 	m.oneventLock.Lock()
 	defer m.oneventLock.Unlock()
 
-	delete(m.listeners, eventId)
+	delete(m.listeners, eventID)
 }
 
 func (m *EventEmitterImpl) Close() {

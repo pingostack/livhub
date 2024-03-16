@@ -14,4 +14,6 @@ var (
 	ErrInvalidRtpmap   = errors.New("invalid rtpmap")
 	ErrNoPayload       = errors.New("no payload type found")
 	ErrNoRtxPayload    = errors.New("no rtx payload type found")
+	ErrNoCodecForPT    = errors.New("no codec for payload type")
+	ErrInvalidFmtp     = errors.New("invalid fmtp")
 )

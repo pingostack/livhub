@@ -12,7 +12,7 @@ type Writer interface {
 	Write(payload []byte, attributes Attributes) (int, error)
 }
 
-type Factory interface {
+type StreamFactory interface {
 	NewInterceptor(id string) (Interceptor, error)
 }
 

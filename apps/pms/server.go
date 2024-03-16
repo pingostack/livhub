@@ -9,6 +9,9 @@ import (
 	"github.com/gogf/gf/util/guid"
 	"github.com/pingostack/neon/internal/core/router"
 	"github.com/pingostack/neon/internal/httpserv"
+	interRtc "github.com/pingostack/neon/internal/rtc"
+	"github.com/pingostack/neon/pkg/deliver/rtc"
+	"github.com/pingostack/neon/pkg/rtclib/sdpassistor"
 	"github.com/pion/webrtc/v4"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -81,13 +84,17 @@ func (ss *SignalServer) handleRequestInternal(req Request, gc *gin.Context) erro
 }
 
 func (ss *SignalServer) publish(req Request, gc *gin.Context) error {
-	src, err := NewFrameSource(ss.ctx, webrtc.SessionDescription{
-		Type: webrtc.SDPTypeOffer,
-		SDP:  req.Data.SDP,
-	}, ss.logger)
-
+	src, err := rtc.NewFrameSource(ss.ctx, interRtc.StreamFactory(), false, ss.logger)
 	if err != nil {
 		return errors.Wrap(err, "failed to create frame source")
+	}
+
+	answer, err := src.SetRemoteDescription(webrtc.SessionDescription{
+		Type: webrtc.SDPTypeOffer,
+		SDP:  req.Data.SDP,
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to set remote description")
 	}
 
 	ss.logger.WithField("metadata", src.Metadata().String()).Debug("frame source metadata")
@@ -121,7 +128,84 @@ func (ss *SignalServer) publish(req Request, gc *gin.Context) error {
 		return errors.Wrap(err, "join failed")
 	}
 
-	answer := src.Answer()
+	resp := Response{
+		Version: req.Version,
+		Method:  req.Method,
+		Err:     0,
+		ErrMsg:  "",
+		Session: session.ID(),
+		Data: struct {
+			SDP string `json:"sdp"`
+		}{
+			SDP: answer.SDP,
+		},
+	}
+
+	ss.logger.WithField("answer", answer.SDP).Debug("resp answer")
+	gc.JSON(http.StatusOK, resp)
+
+	return nil
+}
+
+func (ss *SignalServer) play(req Request, gc *gin.Context) error {
+	// create session
+	peerID := req.Session
+	if peerID == "" {
+		peerID = guid.S()
+	}
+
+	hasAudio, hasVideo, hasData, err := sdpassistor.GetPayloadStatus(req.Data.SDP, webrtc.SDPTypeOffer)
+	if err != nil {
+		ss.logger.WithError(err).Error("failed to get payload status")
+		return errors.Wrap(err, "failed to get payload status")
+	}
+
+	session := NewSession(ss.ctx, router.PeerParams{
+		RemoteAddr:     gc.Request.RemoteAddr,
+		LocalAddr:      gc.Request.Host,
+		PeerID:         peerID,
+		RouterID:       req.Stream,
+		Domain:         gc.Request.Host,
+		URI:            gc.Request.URL.Path,
+		Producer:       false,
+		HasAudio:       hasAudio,
+		HasVideo:       hasVideo,
+		HasDataChannel: hasData,
+	}, ss.logger)
+
+	metadata, err := rtc.NewMetadataFromSDP(req.Data.SDP)
+	if err != nil {
+		ss.logger.WithError(err).Error("failed to create metadata from sdp")
+		return errors.Wrap(err, "failed to create metadata from sdp")
+	}
+
+	dest, err := rtc.NewframeDestination(ss.ctx, metadata, interRtc.StreamFactory(),
+		false, ss.logger)
+	if err != nil {
+		ss.logger.WithError(err).Error("failed to create frame destination")
+		return errors.Wrap(err, "failed create frame destination")
+	}
+
+	err = session.BindFrameDestination(dest)
+	if err != nil {
+		ss.logger.WithError(err).Error("failed to bind frame destination")
+		return errors.Wrap(err, "failed to bind frame source")
+	}
+
+	err = session.Join()
+	if err != nil {
+		ss.logger.WithError(err).Error("join failed")
+		return errors.Wrap(err, "join failed")
+	}
+
+	answer, err := dest.SetRemoteDescription(webrtc.SessionDescription{
+		Type: webrtc.SDPTypeOffer,
+		SDP:  req.Data.SDP,
+	})
+	if err != nil {
+		ss.logger.WithError(err).Error("failed to set remote description")
+		return errors.Wrap(err, "failed to set remote description")
+	}
 
 	resp := Response{
 		Version: req.Version,
@@ -138,10 +222,7 @@ func (ss *SignalServer) publish(req Request, gc *gin.Context) error {
 
 	ss.logger.WithField("answer", answer.SDP).Debug("resp answer")
 	gc.JSON(http.StatusOK, resp)
-	return nil
-}
 
-func (ss *SignalServer) play(req Request, gc *gin.Context) error {
 	return nil
 }
 
