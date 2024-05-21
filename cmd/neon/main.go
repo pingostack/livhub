@@ -2,25 +2,21 @@ package main
 
 import (
 	"context"
-	"runtime"
 
 	"github.com/let-light/gomodule"
-	"github.com/let-light/neon/apps/sfu"
-	"github.com/let-light/neon/pkg/gortc"
+	"github.com/pingostack/neon/apps/pms"
+	"github.com/pingostack/neon/apps/whip"
+	"github.com/pingostack/neon/internal/core"
+	"github.com/pingostack/neon/internal/rtc"
 	"github.com/sirupsen/logrus"
 )
 
-func printStack() {
-	var buf [4096]byte
-	n := runtime.Stack(buf[:], true)
-	logrus.Errorf("==> %s\n", string(buf[:n]))
-}
-
 func serv(ctx context.Context) {
 	gomodule.RegisterDefaultModules()
-	gomodule.RegisterWithName(gortc.WebRTCModule(), "webrtc")
-	gomodule.RegisterWithName(sfu.SfuModule(), "sfu")
-
+	gomodule.RegisterWithName(whip.WhipModule(), "whip")
+	gomodule.RegisterWithName(pms.PMSModule(), "pms")
+	gomodule.RegisterWithName(core.CoreModule(), "core")
+	gomodule.RegisterWithName(rtc.RtcModule(), "webrtc")
 	gomodule.Launch(ctx)
 
 	gomodule.Wait()
@@ -29,8 +25,7 @@ func serv(ctx context.Context) {
 func main() {
 	defer func() {
 		if err := recover(); err != nil {
-			logrus.Errorf("Error during:", err)
-			printStack()
+			logrus.Errorf("Error during: %v", err)
 		}
 	}()
 
