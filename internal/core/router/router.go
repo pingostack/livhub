@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gogf/gf/os/gtimer"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -39,7 +40,7 @@ func NewRouter(ctx context.Context, ns *Namespace, params RouterParams, id strin
 		id:          id,
 		subscribers: make(map[string]Session),
 		logger:      logger.WithField("router", id),
-		stream:      NewStreamImpl(ctx),
+		stream:      NewStreamImpl(ctx, id),
 	}
 
 	r.ctx, r.cancel = context.WithCancel(ctx)
@@ -73,7 +74,10 @@ func (r *RouterImpl) addProducer(session Session) error {
 
 	r.producer = session
 
-	r.stream.SetFrameSource(session.FrameSource())
+	if err := r.stream.AddFrameSource(session.FrameSource()); err != nil {
+		r.logger.WithError(err).Error("failed to add frame source")
+		return errors.Wrap(err, "failed to add frame source")
+	}
 
 	go r.waitSessionDone(session)
 
@@ -94,7 +98,10 @@ func (r *RouterImpl) addSubscriber(session Session) error {
 
 	r.subscribers[session.ID()] = session
 
-	r.stream.AddFrameDestination(session.FrameDestination())
+	if err := r.stream.AddFrameDestination(session.FrameDestination()); err != nil {
+		r.logger.WithError(err).Error("failed to add frame destination")
+		return errors.Wrap(err, "failed to add frame destination")
+	}
 
 	go r.waitSessionDone(session)
 

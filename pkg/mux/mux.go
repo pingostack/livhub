@@ -14,15 +14,15 @@ type MediaMux interface {
 }
 
 type NoopMux struct {
-	deliver.MediaFrameMulticaster
+	deliver.MediaFramePipe
 }
 
-func NewNoopMux(ctx context.Context, acodec, vcodec deliver.CodecType, packetType deliver.PacketType) *NoopMux {
+func NewNoopMux(ctx context.Context, md deliver.Metadata) *NoopMux {
 	return &NoopMux{
-		MediaFrameMulticaster: deliver.NewMediaFrameMulticaster(ctx, acodec, vcodec, packetType, packetType),
+		MediaFramePipe: deliver.NewMediaFramePipe(ctx, md, md),
 	}
 }
 
 func (m *NoopMux) Close() {
-	m.MediaFrameMulticaster.MediaFrameMulticasterClose()
+	m.MediaFramePipe.Close()
 }

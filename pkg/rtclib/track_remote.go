@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/pingostack/neon/pkg/logger"
+	"github.com/pion/interceptor"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
@@ -28,20 +29,11 @@ func NewTrackRemote(ctx context.Context,
 		logger:   logger,
 	}
 
-	go t.loopReadRTCP()
-
 	return t
 }
 
-func (t *TrackRemote) loopReadRTCP() {
-	buf := make([]byte, 1500)
-	for {
-		_, _, err := t.receiver.Read(buf)
-		if err != nil {
-			t.logger.Warnf("receiver read rtcp error %v", err)
-			return
-		}
-	}
+func (t *TrackRemote) ReadRTCP(buf []byte) (n int, a interceptor.Attributes, err error) {
+	return t.receiver.Read(buf)
 }
 
 func (t *TrackRemote) ReadRTP() (*rtp.Packet, error) {
@@ -59,4 +51,8 @@ func (t *TrackRemote) IsVideo() bool {
 
 func (t *TrackRemote) SSRC() webrtc.SSRC {
 	return t.track.SSRC()
+}
+
+func (t *TrackRemote) Kind() webrtc.RTPCodecType {
+	return t.track.Kind()
 }

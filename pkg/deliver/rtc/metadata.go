@@ -14,7 +14,6 @@ func convMetadata(pu *sdpassistor.PayloadUnion) deliver.Metadata {
 		deliverMd.Audio = &deliver.AudioMetadata{
 			Codec:          pu.Audio.EncodingName,
 			CodecType:      deliver.ConvCodecType(pu.Audio.EncodingName),
-			Type:           deliver.PacketTypeRtp,
 			RtpPayloadType: pu.Audio.PayloadType,
 			SampleRate:     pu.Audio.ClockRate,
 		}
@@ -29,8 +28,8 @@ func convMetadata(pu *sdpassistor.PayloadUnion) deliver.Metadata {
 		deliverMd.Video = &deliver.VideoMetadata{
 			Codec:          pu.Video.EncodingName,
 			CodecType:      deliver.ConvCodecType(pu.Video.EncodingName),
-			Type:           deliver.PacketTypeRtp,
 			RtpPayloadType: pu.Video.PayloadType,
+			ClockRate:      pu.Video.ClockRate,
 		}
 	}
 
@@ -39,6 +38,8 @@ func convMetadata(pu *sdpassistor.PayloadUnion) deliver.Metadata {
 			Codec: deliver.CodecTypeNone.String(),
 		}
 	}
+
+	deliverMd.PacketType = deliver.PacketTypeRtp
 
 	return deliverMd
 }

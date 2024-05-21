@@ -6,15 +6,9 @@ import (
 	"github.com/pingostack/neon/pkg/deliver"
 )
 
-type MediaDemuxParams struct {
-	ACodec       deliver.CodecType
-	VCodec       deliver.CodecType
-	InPacketType deliver.PacketType
-}
-
-func NewMediaDemux(ctx context.Context, params MediaDemuxParams) (MediaDemux, error) {
-	if params.InPacketType == deliver.PacketTypeRaw {
-		return NewNoopDemux(ctx, params.ACodec, params.VCodec, params.InPacketType), nil
+func NewMediaDemux(ctx context.Context, md deliver.Metadata) (MediaDemux, error) {
+	if md.PacketType == deliver.PacketTypeRaw {
+		return NewNoopDemux(ctx, md), nil
 	} else {
 		return nil, ErrDemuxNotSupported
 	}

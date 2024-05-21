@@ -19,45 +19,45 @@ type RemoteStream struct {
 }
 
 func NewRemoteStream(transport *transport.Transport) (*RemoteStream, error) {
-	p := &RemoteStream{
+	rs := &RemoteStream{
 		Transport: transport,
 		logger:    transport.Logger(),
 		chTrack:   make(chan *TrackRemote, 2),
 	}
 
-	p.ctx, p.cancel = context.WithCancel(transport.Context())
+	rs.ctx, rs.cancel = context.WithCancel(transport.Context())
 
-	if err := p.validate(); err != nil {
+	if err := rs.validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid remote stream")
 	}
 
-	p.Transport.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
-		p.logger.Infof("got track %s(%s)", track.ID(), track.Kind())
-		p.chTrack <- NewTrackRemote(p.ctx, track, receiver, p.Transport.WriteRTCP, p.logger)
+	rs.Transport.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
+		rs.logger.Infof("got track %s(%s)", track.ID(), track.Kind())
+		rs.chTrack <- NewTrackRemote(rs.ctx, track, receiver, rs.Transport.WriteRTCP, rs.logger)
 	})
 
-	return p, nil
+	return rs, nil
 }
 
-func (p *RemoteStream) validate() error {
-	if p.Transport == nil {
+func (rs *RemoteStream) validate() error {
+	if rs.Transport == nil {
 		return errors.New("transport not set")
 	}
 
-	if p.ctx == nil {
+	if rs.ctx == nil {
 		ctx, cancel := context.WithCancel(context.Background())
-		p.ctx = ctx
-		p.cancel = cancel
+		rs.ctx = ctx
+		rs.cancel = cancel
 	}
 
-	if p.logger == nil {
-		p.logger = logger.DefaultLogger
+	if rs.logger == nil {
+		rs.logger = logger.DefaultLogger
 	}
 
 	return nil
 }
 
-func (p *RemoteStream) GatheringTracks(gatherAudioTrack, gatherVideoTrack bool, timeout time.Duration) ([]*TrackRemote, error) {
+func (rs *RemoteStream) GatheringTracks(gatherAudioTrack, gatherVideoTrack bool, timeout time.Duration) ([]*TrackRemote, error) {
 	gotAudio, gotVideo := false, false
 
 	tracks := make([]*TrackRemote, 0)
@@ -65,9 +65,9 @@ func (p *RemoteStream) GatheringTracks(gatherAudioTrack, gatherVideoTrack bool, 
 		select {
 		case <-time.After(timeout):
 			return nil, errors.New("gather tracks timeout")
-		case <-p.ctx.Done():
+		case <-rs.ctx.Done():
 			return nil, errors.New("gather tracks canceled")
-		case track := <-p.chTrack:
+		case track := <-rs.chTrack:
 			tracks = append(tracks, track)
 			if track.IsAudio() {
 				gotAudio = true
@@ -94,4 +94,9 @@ func (p *RemoteStream) GatheringTracks(gatherAudioTrack, gatherVideoTrack bool, 
 			}
 		}
 	}
+}
+
+func (rs *RemoteStream) Close() {
+	rs.cancel()
+	rs.Transport.Close()
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gogf/gf/util/guid"
@@ -84,7 +85,7 @@ func (ss *SignalServer) handleRequestInternal(req Request, gc *gin.Context) erro
 }
 
 func (ss *SignalServer) publish(req Request, gc *gin.Context) error {
-	src, err := rtc.NewFrameSource(ss.ctx, interRtc.StreamFactory(), false, ss.logger)
+	src, err := rtc.NewFrameSource(ss.ctx, interRtc.StreamFactory(), false, 2*time.Second, ss.logger)
 	if err != nil {
 		return errors.Wrap(err, "failed to create frame source")
 	}
@@ -179,7 +180,7 @@ func (ss *SignalServer) play(req Request, gc *gin.Context) error {
 		return errors.Wrap(err, "failed to create metadata from sdp")
 	}
 
-	dest, err := rtc.NewframeDestination(ss.ctx, metadata, interRtc.StreamFactory(),
+	dest, err := rtc.NewFrameDestination(ss.ctx, metadata, interRtc.StreamFactory(),
 		false, ss.logger)
 	if err != nil {
 		ss.logger.WithError(err).Error("failed to create frame destination")

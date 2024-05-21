@@ -85,7 +85,7 @@ func (m *EventEmitterImpl) EmitEvent(eventID eventID, data interface{}) error {
 func (m *EventEmitterImpl) run() {
 	defer func() {
 		if m.logger != nil {
-			m.logger.Infof("EventEmitter stopped")
+			m.logger.Debug("EventEmitter stopped")
 		}
 		close(m.eventCh)
 	}()

@@ -23,6 +23,7 @@ type SessionImpl struct {
 	router           router.Router
 	frameSource      deliver.FrameSource
 	frameDestination deliver.FrameDestination
+	onceClose        sync.Once
 }
 
 func NewSession(ctx context.Context, params router.PeerParams, logger *logrus.Entry) router.Session {
@@ -49,8 +50,15 @@ func (session *SessionImpl) RouterID() string {
 	return session.params.RouterID
 }
 
+func (session *SessionImpl) close(e error) {
+	session.onceClose.Do(func() {
+		session.cancel()
+		session.logger.WithError(e).Infof("session closed")
+	})
+}
+
 func (session *SessionImpl) Finalize(e error) {
-	session.cancel()
+	session.close(e)
 	session.logger.WithError(e).Infof("session finalized")
 }
 
@@ -109,6 +117,24 @@ func (session *SessionImpl) BindFrameSource(src deliver.FrameSource) error {
 		return ErrFrameSourceAlreadyBound
 	}
 	session.frameSource = src
+	go func(fs deliver.FrameSource) {
+		for {
+			select {
+			case <-session.ctx.Done():
+				if session.frameSource != nil {
+					session.logger.Debug("session closed, closing frame source")
+					session.frameSource.Close()
+				}
+				return
+			case <-fs.Context().Done():
+				if fs == session.frameSource {
+					session.logger.Debug("frame source closed, closing session")
+					session.close(ErrFrameSourceClosed)
+					return
+				}
+			}
+		}
+	}(src)
 
 	return nil
 }
@@ -119,6 +145,24 @@ func (session *SessionImpl) BindFrameDestination(dest deliver.FrameDestination) 
 	}
 
 	session.frameDestination = dest
+	go func(fd deliver.FrameDestination) {
+		for {
+			select {
+			case <-session.ctx.Done():
+				if session.frameDestination != nil {
+					session.logger.Debug("session closed, closing frame destination")
+					session.frameDestination.Close()
+				}
+				return
+			case <-fd.Context().Done():
+				if fd == session.frameDestination {
+					session.logger.Debug("frame destination closed, closing session")
+					session.close(ErrFrameDestinationClosed)
+				}
+			}
+		}
+	}(dest)
+
 	return nil
 }
 

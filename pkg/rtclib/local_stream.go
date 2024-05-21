@@ -3,7 +3,7 @@ package rtclib
 import (
 	"context"
 
-	"github.com/bluenviron/gortsplib/v4/pkg/format"
+	"github.com/pingostack/neon/pkg/deliver"
 	"github.com/pingostack/neon/pkg/eventemitter"
 	"github.com/pingostack/neon/pkg/logger"
 	"github.com/pingostack/neon/pkg/rtclib/transport"
@@ -19,52 +19,44 @@ type LocalStream struct {
 }
 
 func NewLocalStream(transport *transport.Transport) (*LocalStream, error) {
-	c := &LocalStream{
+	ls := &LocalStream{
 		Transport:    transport,
 		logger:       transport.Logger(),
 		eventemitter: eventemitter.NewEventEmitter(transport.Context(), defaultEventEmitterLength, transport.Logger()),
 	}
 
-	c.ctx, c.cancel = context.WithCancel(transport.Context())
+	ls.ctx, ls.cancel = context.WithCancel(transport.Context())
 
-	if err := c.validate(); err != nil {
+	if err := ls.validate(); err != nil {
 		return nil, errors.Wrap(err, "invalid local stream")
 	}
 
-	return c, nil
+	return ls, nil
 }
 
-func (c *LocalStream) validate() error {
-	if c.Transport == nil {
+func (ls *LocalStream) validate() error {
+	if ls.Transport == nil {
 		return errors.New("transport not set")
 	}
 
-	if c.ctx == nil {
+	if ls.ctx == nil {
 		ctx, cancel := context.WithCancel(context.Background())
-		c.ctx = ctx
-		c.cancel = cancel
+		ls.ctx = ctx
+		ls.cancel = cancel
 	}
 
-	if c.logger == nil {
-		c.logger = logger.DefaultLogger
+	if ls.logger == nil {
+		ls.logger = logger.DefaultLogger
 	}
 
 	return nil
 }
 
-func (c *LocalStream) SetupTracks(videoTrack format.Format, audioTrack format.Format) ([]*TrackLocl, error) {
-	var tracks []*TrackLocl
+func (ls *LocalStream) AddTrack(codec deliver.CodecType, clockRate uint32, logger logger.Logger) (track *TrackLocl, err error) {
+	return NewTrackLocl(ls.ctx, codec, clockRate, ls.Transport.AddTrack, logger)
+}
 
-	for _, forma := range []format.Format{videoTrack, audioTrack} {
-		if forma != nil {
-			track, err := NewTrackLocl(forma, c.Transport.AddTrack)
-			if err != nil {
-				return nil, err
-			}
-
-			tracks = append(tracks, track)
-		}
-	}
-
-	return tracks, nil
+func (ls *LocalStream) Close() {
+	ls.cancel()
+	ls.Transport.Close()
 }

@@ -14,19 +14,19 @@ type MediaDemux interface {
 }
 
 type NoopDemux struct {
-	deliver.MediaFrameMulticaster
+	deliver.MediaFramePipe
 }
 
-func NewNoopDemux(ctx context.Context, acodec, vcodec deliver.CodecType, inPacketType deliver.PacketType) *NoopDemux {
+func NewNoopDemux(ctx context.Context, md deliver.Metadata) *NoopDemux {
 	return &NoopDemux{
-		MediaFrameMulticaster: deliver.NewMediaFrameMulticaster(ctx, acodec, vcodec, inPacketType, inPacketType),
+		MediaFramePipe: deliver.NewMediaFramePipe(ctx, md, md),
 	}
 }
 
 func (m *NoopDemux) Label() string {
-	return m.SourceAudioCodec().String() + "-" + m.SourceVideoCodec().String() + "-" + m.SourcePacketType().String() + "-" + m.DestinationPacketType().String()
+	return ""
 }
 
 func (m *NoopDemux) Close() {
-	m.MediaFrameMulticaster.MediaFrameMulticasterClose()
+	m.MediaFramePipe.Close()
 }

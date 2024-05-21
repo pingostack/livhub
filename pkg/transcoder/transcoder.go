@@ -14,19 +14,17 @@ type Transcoder interface {
 }
 
 type NoopTranscoder struct {
-	deliver.MediaFrameMulticaster
+	deliver.MediaFramePipeImpl
 }
 
 func NewNoopTranscoder(ctx context.Context, inCodec deliver.CodecType) Transcoder {
-	return &NoopTranscoder{
-		MediaFrameMulticaster: deliver.NewMediaFrameMulticaster(ctx, inCodec, inCodec, deliver.PacketTypeRaw, deliver.PacketTypeRaw),
-	}
+	return &NoopTranscoder{}
 }
 
 func (t *NoopTranscoder) Label() string {
-	return t.SourceVideoCodec().String() + "-" + t.SourceAudioCodec().String() + "-" + t.DestinationVideoCodec().String() + "-" + t.DestinationAudioCodec().String()
+	return ""
 }
 
 func (t *NoopTranscoder) Close() {
-	t.MediaFrameMulticaster.MediaFrameMulticasterClose()
+	t.MediaFramePipeImpl.Close()
 }

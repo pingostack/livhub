@@ -14,4 +14,6 @@ var (
 	ErrStreamClosed         = errors.New("stream closed")
 	ErrNilFrameDestination  = errors.New("nil frame destination")
 	ErrNilFrameSource       = errors.New("nil frame source")
+	ErrStreamTimeout        = errors.New("stream timeout")
+	ErrFrameSourceExists    = errors.New("frame source exists")
 )

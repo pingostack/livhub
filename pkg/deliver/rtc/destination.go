@@ -2,10 +2,15 @@ package rtc
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"reflect"
+	"sync"
 
 	"github.com/pingostack/neon/pkg/deliver"
 	"github.com/pingostack/neon/pkg/rtclib"
+	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 	"github.com/sirupsen/logrus"
@@ -18,11 +23,12 @@ type FrameDestination struct {
 	localStream *rtclib.LocalStream
 	logger      *logrus.Entry
 	metadata    deliver.Metadata
-	audioTrack  *webrtc.TrackLocalStaticRTP
-	videoTrack  *webrtc.TrackLocalStaticRTP
+	audioTrack  *rtclib.TrackLocl
+	videoTrack  *rtclib.TrackLocl
+	onceClose   sync.Once
 }
 
-func NewframeDestination(ctx context.Context, metadata deliver.Metadata, streamFactory rtclib.StreamFactory, preferTCP bool, logger *logrus.Entry) (fd *FrameDestination, err error) {
+func NewFrameDestination(ctx context.Context, metadata deliver.Metadata, streamFactory rtclib.StreamFactory, preferTCP bool, logger *logrus.Entry) (fd *FrameDestination, err error) {
 	if logger == nil {
 		logger = logrus.WithField("obj", "frame-destination")
 	} else {
@@ -60,24 +66,9 @@ func NewframeDestination(ctx context.Context, metadata deliver.Metadata, streamF
 		return nil, err
 	}
 
-	fd.FrameDestination = deliver.NewFrameDestinationImpl(fd.ctx,
-		fd.metadata.Audio.CodecType,
-		fd.metadata.Video.CodecType,
-		deliver.PacketTypeRtp)
+	fd.FrameDestination = deliver.NewFrameDestinationImpl(fd.ctx, metadata)
 
 	return fd, nil
-}
-
-func (fd *FrameDestination) processRTCP(rtpSender *webrtc.RTPSender) {
-	rtcpBuf := make([]byte, 1500)
-	for {
-		if _, _, rtcpErr := rtpSender.Read(rtcpBuf); rtcpErr != nil {
-			fd.logger.WithError(rtcpErr).Error("failed to read rtcp packet")
-			return
-		}
-
-		fd.logger.Debug("read rtcp packet")
-	}
 }
 
 func (fd *FrameDestination) CreateOffer(options *webrtc.OfferOptions) (sd webrtc.SessionDescription, err error) {
@@ -106,47 +97,44 @@ func (fd *FrameDestination) SetRemoteDescription(remoteSdp webrtc.SessionDescrip
 	return localSdp, nil
 }
 
-func (fd *FrameDestination) SetAudioSource(src deliver.FrameSource) error {
-	track, err := webrtc.NewTrackLocalStaticRTP(
-		webrtc.RTPCodecCapability{
-			MimeType:  webrtc.MimeTypeOpus, //fmt.Sprintf("audio/%s", src.SourceAudioCodec().String()),
-			ClockRate: 48000,
-			Channels:  2,
-		}, "audio", "neon")
+func (fd *FrameDestination) addAudioTrack(am *deliver.AudioMetadata) error {
+	var err error
+	fd.audioTrack, err = fd.localStream.AddTrack(am.CodecType, am.SampleRate, fd.logger)
 	if err != nil {
 		return err
 	}
 
-	rtpSender, err := fd.localStream.AddTrack(track)
-	if err != nil {
-		return err
-	}
+	go fd.loopReadRTCP(fd.audioTrack)
 
-	fd.audioTrack = track
-	go fd.processRTCP(rtpSender)
-
-	return fd.FrameDestination.SetAudioSource(src)
+	return nil
 }
 
-func (fd *FrameDestination) SetVideoSource(src deliver.FrameSource) error {
-	track, err := webrtc.NewTrackLocalStaticRTP(
-		webrtc.RTPCodecCapability{
-			MimeType:  webrtc.MimeTypeVP8, //fmt.Sprintf("video/%s", src.SourceVideoCodec().String()),
-			ClockRate: 90000,
-		}, "video", "neon")
+func (fd *FrameDestination) addVideoTrack(vm *deliver.VideoMetadata) error {
+	var err error
+	fd.videoTrack, err = fd.localStream.AddTrack(vm.CodecType, vm.ClockRate, fd.logger)
 	if err != nil {
 		return err
 	}
 
-	rtpSender, err := fd.localStream.AddTrack(track)
-	if err != nil {
-		return err
+	go fd.loopReadRTCP(fd.videoTrack)
+
+	return nil
+}
+
+func (fd *FrameDestination) OnSource(src deliver.FrameSource) error {
+	if src.Metadata().Audio != nil {
+		if err := fd.addAudioTrack(src.Metadata().Audio); err != nil {
+			return err
+		}
 	}
 
-	fd.videoTrack = track
-	go fd.processRTCP(rtpSender)
+	if src.Metadata().Video != nil {
+		if err := fd.addVideoTrack(src.Metadata().Video); err != nil {
+			return err
+		}
+	}
 
-	return fd.FrameDestination.SetVideoSource(src)
+	return fd.FrameDestination.OnSource(src)
 }
 
 func (fd *FrameDestination) OnFrame(frame deliver.Frame, attr deliver.Attributes) {
@@ -155,11 +143,14 @@ func (fd *FrameDestination) OnFrame(frame deliver.Frame, attr deliver.Attributes
 		return
 	}
 
-	var track *webrtc.TrackLocalStaticRTP
+	var track *rtclib.TrackLocl
 	if frame.Codec.IsAudio() {
 		track = fd.audioTrack
 	} else if frame.Codec.IsVideo() {
 		track = fd.videoTrack
+	} else {
+		fd.logger.WithField("codec", frame.Codec).Error("invalid codec")
+		return
 	}
 
 	packet, ok := frame.RawPacket.(*rtp.Packet)
@@ -168,10 +159,91 @@ func (fd *FrameDestination) OnFrame(frame deliver.Frame, attr deliver.Attributes
 		return
 	}
 
-	//fd.logger.WithField("packet", packet).Debug("write rtp packet")
-
 	err := track.WriteRTP(packet)
 	if err != nil {
 		fd.logger.WithError(err).Error("failed to write rtp packet")
 	}
+}
+
+func (fd *FrameDestination) loopReadRTCP(track *rtclib.TrackLocl) {
+	defer func() {
+		if err := recover(); err != nil {
+			fd.logger.WithField("error", err).Error("loopReadRTCP panic")
+			fd.close()
+		}
+	}()
+
+	buf := make([]byte, 1500)
+	for {
+		select {
+		case <-fd.ctx.Done():
+			return
+		default:
+			i, a, err := track.ReadRTCP(buf)
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					fd.logger.WithError(err).Info("read rtcp EOF")
+					fd.close()
+					return
+				}
+
+				fd.logger.WithError(err).Error("failed to read rtcp")
+			} else {
+				pkts, err := rtcp.Unmarshal(buf[:i])
+				if err != nil {
+					fd.logger.WithError(err).Error("failed to unmarshal rtcp")
+					continue
+				}
+
+				for _, pkt := range pkts {
+					switch p := pkt.(type) {
+					case *rtcp.PictureLossIndication:
+						fd.logger.WithField("ssrc", p.MediaSSRC).WithField("attri", a).Debug("received pli")
+						fd.sendPLI()
+					case *rtcp.FullIntraRequest:
+						fd.logger.WithField("ssrc", p.MediaSSRC).WithField("attri", a).Debug("received fir")
+						fd.sendFIR()
+					default:
+						fd.logger.WithField("pkt-type", reflect.TypeOf(pkt)).Debug("received rtcp")
+					}
+				}
+			}
+
+		}
+	}
+}
+
+func (fd *FrameDestination) close() {
+	fd.onceClose.Do(func() {
+		fd.cancel()
+		fd.localStream.Close()
+		fd.FrameDestination.Close()
+		fd.logger.Info("FrameDestination closed")
+	})
+}
+
+func (fd *FrameDestination) Close() {
+	fd.close()
+}
+
+func (fd *FrameDestination) sendPLI() {
+	if fd.videoTrack == nil {
+		return
+	}
+
+	fd.DeliverFeedback(deliver.FeedbackMsg{
+		Type: deliver.FeedbackTypeVideo,
+		Cmd:  deliver.FeedbackCmdPLI,
+	})
+}
+
+func (fd *FrameDestination) sendFIR() {
+	if fd.videoTrack == nil {
+		return
+	}
+
+	fd.DeliverFeedback(deliver.FeedbackMsg{
+		Type: deliver.FeedbackTypeVideo,
+		Cmd:  deliver.FeedbackCmdFIR,
+	})
 }

@@ -2,6 +2,7 @@ package pms
 
 import (
 	"context"
+	"time"
 
 	"github.com/let-light/gomodule"
 	"github.com/pingostack/neon/internal/httpserv"
@@ -15,6 +16,10 @@ var pmsModule *pms
 type ISignalServer interface {
 	Start() error
 	Close() error
+}
+
+type WebRTCConfig struct {
+	KeyFrameInterval time.Time `json:"keyFrameInterval" mapstructure:"keyFrameInterval"`
 }
 
 type PMSSettings struct {

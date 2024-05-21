@@ -201,22 +201,21 @@ type Frame struct {
 }
 
 type AudioMetadata struct {
-	Codec          string     `json:"codec"`
-	CodecType      CodecType  `json:"codecType"`
-	Type           PacketType `json:"type"`
-	SampleRate     uint32     `json:"sampleRate"`
-	Channels       uint8      `json:"channels"`
-	RtpPayloadType uint8      `json:"rtpPayloadType"`
+	Codec          string    `json:"codec"`
+	CodecType      CodecType `json:"codecType"`
+	SampleRate     uint32    `json:"sampleRate"`
+	Channels       uint8     `json:"channels"`
+	RtpPayloadType uint8     `json:"rtpPayloadType"`
 }
 
 type VideoMetadata struct {
-	Codec          string     `json:"codec"`
-	CodecType      CodecType  `json:"codecType"`
-	Type           PacketType `json:"type"`
-	Width          int        `json:"width"`
-	Height         int        `json:"height"`
-	FPS            int        `json:"fps"`
-	RtpPayloadType uint8      `json:"rtpPayloadType"`
+	Codec          string    `json:"codec"`
+	CodecType      CodecType `json:"codecType"`
+	Width          int       `json:"width"`
+	Height         int       `json:"height"`
+	FPS            int       `json:"fps"`
+	RtpPayloadType uint8     `json:"rtpPayloadType"`
+	ClockRate      uint32    `json:"clockRate"`
 }
 
 type DataMetadata struct {
@@ -229,6 +228,7 @@ type Metadata struct {
 	Video      *VideoMetadata `json:"video"`
 	Data       *DataMetadata  `json:"data"`
 	PacketType PacketType     `json:"packetType"`
+	GUID       string         `json:"guid"`
 }
 
 func (md *Metadata) String() string {
@@ -246,6 +246,54 @@ func (md *Metadata) HasVideo() bool {
 
 func (md *Metadata) HasData() bool {
 	return md.Data != nil
+}
+
+func (md *Metadata) EqualAudioCodec(md2 *Metadata) bool {
+	if !md.HasAudio() && !md2.HasVideo() {
+		return true
+	}
+
+	if !md.HasAudio() || !md2.HasVideo() {
+		return false
+	}
+
+	return md.Audio.CodecType == md2.Audio.CodecType
+}
+
+func (md *Metadata) EqualVideoCodec(md2 *Metadata) bool {
+	if !md.HasAudio() && !md2.HasVideo() {
+		return true
+	}
+
+	if !md.HasAudio() || !md2.HasVideo() {
+		return false
+	}
+
+	return md.Video.CodecType == md2.Video.CodecType
+}
+
+func (md *Metadata) MatchFormat(md2 *Metadata) bool {
+	if md.PacketType != md2.PacketType {
+		return false
+	}
+
+	if md.HasAudio() && md2.HasAudio() {
+		if !md.EqualAudioCodec(md2) {
+			return false
+		}
+	}
+
+	if md.HasVideo() && md2.HasVideo() {
+		if !md.EqualVideoCodec(md2) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (md *Metadata) FormatName() string {
+	return md.PacketType.String()
 }
 
 type FeedbackType int

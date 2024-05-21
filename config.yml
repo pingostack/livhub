@@ -40,14 +40,20 @@ pms: {
 webrtc: {
   default: {
     useIceLite: true,
-    nat1to1Ips: ["127.0.0.1", "192.168.100.253", "169.254.176.67"],
-    #nat1to1Ips: ["127.0.0.1/127.0.0.1", "192.168.100.253/192.168.100.253", "169.254.176.67/169.254.176.67"],
-    autoGenerateExternalIp: false,
+    nat1to1Ips: ["127.0.0.1", "192.168.100.253", "169.254.176.67", "192.168.3.123"],
+  # nat1to1Ips: ["127.0.0.1/127.0.0.1", "192.168.100.253/192.168.100.253", "169.254.176.67/169.254.176.67"],
+    autoGenerateExternalIp: true,
   #  icePortRange: "7300-7400",
     udpMuxPort: "8888-8888",
   #  tcpPort: 8888,
-    stunServers: ["stun:stun.l.google.com:19302"],
+    stunServers: ["stun.l.google.com:19302"],
     useMdns: true,
+    ice_config: {
+      "minTcpICEConnectTimeout": 10,
+      "iceFailedTimeout": 10,
+      "maxTcpICEConnectTimeout": 20,
+      "iceDisconnectedTimeout": 5,
+    }
   }
 }
 
