@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"reflect"
 	"sync"
 
 	"github.com/pingostack/neon/pkg/deliver"
@@ -204,7 +203,7 @@ func (fd *FrameDestination) loopReadRTCP(track *rtclib.TrackLocl) {
 						fd.logger.WithField("ssrc", p.MediaSSRC).WithField("attri", a).Debug("received fir")
 						fd.sendFIR()
 					default:
-						fd.logger.WithField("pkt-type", reflect.TypeOf(pkt)).Debug("received rtcp")
+						//	fd.logger.WithField("pkt-type", reflect.TypeOf(pkt)).Debug("received rtcp")
 					}
 				}
 			}

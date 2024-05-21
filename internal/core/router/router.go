@@ -39,7 +39,7 @@ func NewRouter(ctx context.Context, ns *Namespace, params RouterParams, id strin
 		params:      params,
 		id:          id,
 		subscribers: make(map[string]Session),
-		logger:      logger.WithField("router", id),
+		logger:      logger.WithField("obj", "router"),
 		stream:      NewStreamImpl(ctx, id),
 	}
 

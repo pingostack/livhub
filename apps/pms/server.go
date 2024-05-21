@@ -24,9 +24,9 @@ type SignalServer struct {
 	logger *logrus.Entry
 }
 
-func NewSignalServer(ctx context.Context, httpParams httpserv.HttpParams, logger *logrus.Entry) *SignalServer {
+func NewServer(ctx context.Context, logger *logrus.Entry) *SignalServer {
 	return &SignalServer{
-		SignalServer: httpserv.NewSignalServer(ctx, httpParams, logger),
+		SignalServer: httpserv.NewSignalServer(ctx, settings().HttpParams, logger),
 		ctx:          ctx,
 		logger:       logger,
 	}
@@ -85,7 +85,16 @@ func (ss *SignalServer) handleRequestInternal(req Request, gc *gin.Context) erro
 }
 
 func (ss *SignalServer) publish(req Request, gc *gin.Context) error {
-	src, err := rtc.NewFrameSource(ss.ctx, interRtc.StreamFactory(), false, 2*time.Second, ss.logger)
+	peerID := req.Session
+	if peerID == "" {
+		peerID = guid.S()
+	}
+	logger := ss.logger.WithFields(logrus.Fields{
+		"session": peerID,
+		"stream":  req.Stream,
+	})
+
+	src, err := rtc.NewFrameSource(ss.ctx, interRtc.StreamFactory(), false, settings().KeyFrameIntervalSecond*time.Second, logger)
 	if err != nil {
 		return errors.Wrap(err, "failed to create frame source")
 	}
@@ -98,13 +107,9 @@ func (ss *SignalServer) publish(req Request, gc *gin.Context) error {
 		return errors.Wrap(err, "failed to set remote description")
 	}
 
-	ss.logger.WithField("metadata", src.Metadata().String()).Debug("frame source metadata")
-
 	// create session
-	peerID := req.Session
-	if peerID == "" {
-		peerID = guid.S()
-	}
+
+	logger.WithField("metadata", src.Metadata().String()).Debug("frame source metadata")
 
 	session := NewSession(ss.ctx, router.PeerParams{
 		RemoteAddr:     gc.Request.RemoteAddr,
@@ -117,7 +122,7 @@ func (ss *SignalServer) publish(req Request, gc *gin.Context) error {
 		HasAudio:       src.Metadata().HasAudio(),
 		HasVideo:       src.Metadata().HasVideo(),
 		HasDataChannel: src.Metadata().HasData(),
-	}, ss.logger)
+	}, logger)
 
 	err = session.BindFrameSource(src)
 	if err != nil {
@@ -142,7 +147,7 @@ func (ss *SignalServer) publish(req Request, gc *gin.Context) error {
 		},
 	}
 
-	ss.logger.WithField("answer", answer.SDP).Debug("resp answer")
+	logger.WithField("answer", answer.SDP).Debug("resp answer")
 	gc.JSON(http.StatusOK, resp)
 
 	return nil
@@ -155,9 +160,15 @@ func (ss *SignalServer) play(req Request, gc *gin.Context) error {
 		peerID = guid.S()
 	}
 
+	logger := ss.logger.WithFields(logrus.Fields{
+		"session": peerID,
+		"stream":  req.Stream,
+	})
+
+	logger.Debug("play request")
 	hasAudio, hasVideo, hasData, err := sdpassistor.GetPayloadStatus(req.Data.SDP, webrtc.SDPTypeOffer)
 	if err != nil {
-		ss.logger.WithError(err).Error("failed to get payload status")
+		logger.WithError(err).Error("failed to get payload status")
 		return errors.Wrap(err, "failed to get payload status")
 	}
 
@@ -172,30 +183,30 @@ func (ss *SignalServer) play(req Request, gc *gin.Context) error {
 		HasAudio:       hasAudio,
 		HasVideo:       hasVideo,
 		HasDataChannel: hasData,
-	}, ss.logger)
+	}, logger)
 
 	metadata, err := rtc.NewMetadataFromSDP(req.Data.SDP)
 	if err != nil {
-		ss.logger.WithError(err).Error("failed to create metadata from sdp")
+		logger.WithError(err).Error("failed to create metadata from sdp")
 		return errors.Wrap(err, "failed to create metadata from sdp")
 	}
 
 	dest, err := rtc.NewFrameDestination(ss.ctx, metadata, interRtc.StreamFactory(),
-		false, ss.logger)
+		false, logger)
 	if err != nil {
-		ss.logger.WithError(err).Error("failed to create frame destination")
+		logger.WithError(err).Error("failed to create frame destination")
 		return errors.Wrap(err, "failed create frame destination")
 	}
 
 	err = session.BindFrameDestination(dest)
 	if err != nil {
-		ss.logger.WithError(err).Error("failed to bind frame destination")
+		logger.WithError(err).Error("failed to bind frame destination")
 		return errors.Wrap(err, "failed to bind frame source")
 	}
 
 	err = session.Join()
 	if err != nil {
-		ss.logger.WithError(err).Error("join failed")
+		logger.WithError(err).Error("join failed")
 		return errors.Wrap(err, "join failed")
 	}
 
@@ -204,7 +215,7 @@ func (ss *SignalServer) play(req Request, gc *gin.Context) error {
 		SDP:  req.Data.SDP,
 	})
 	if err != nil {
-		ss.logger.WithError(err).Error("failed to set remote description")
+		logger.WithError(err).Error("failed to set remote description")
 		return errors.Wrap(err, "failed to set remote description")
 	}
 
@@ -221,7 +232,7 @@ func (ss *SignalServer) play(req Request, gc *gin.Context) error {
 		},
 	}
 
-	ss.logger.WithField("answer", answer.SDP).Debug("resp answer")
+	logger.WithField("answer", answer.SDP).Debug("resp answer")
 	gc.JSON(http.StatusOK, resp)
 
 	return nil

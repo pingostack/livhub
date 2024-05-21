@@ -2,6 +2,7 @@ package pms
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/let-light/gomodule"
@@ -18,12 +19,9 @@ type ISignalServer interface {
 	Close() error
 }
 
-type WebRTCConfig struct {
-	KeyFrameInterval time.Time `json:"keyFrameInterval" mapstructure:"keyFrameInterval"`
-}
-
 type PMSSettings struct {
-	httpserv.HttpParams `json:"http" mapstructure:"http"`
+	httpserv.HttpParams    `json:"http" mapstructure:"http"`
+	KeyFrameIntervalSecond time.Duration `json:"keyFrameIntervalSecond" mapstructure:"keyFrameIntervalSecond"`
 }
 
 type pms struct {
@@ -33,6 +31,7 @@ type pms struct {
 	settings    *PMSSettings
 	logger      *logrus.Entry
 	serv        ISignalServer
+	lock        sync.RWMutex
 }
 
 func init() {
@@ -43,6 +42,10 @@ func init() {
 
 func PMSModule() *pms {
 	return pmsModule
+}
+
+func settings() PMSSettings {
+	return pmsModule.Settings()
 }
 
 func (pms *pms) InitModule(ctx context.Context, _ *gomodule.Manager) (interface{}, error) {
@@ -57,12 +60,20 @@ func (pms *pms) InitCommand() ([]*cobra.Command, error) {
 
 func (pms *pms) ConfigChanged() {
 	if pms.settings == nil {
+		pms.lock.Lock()
+		defer pms.lock.Unlock()
 		pms.settings = &pms.preSettings
 	}
 }
 
+func (pms *pms) Settings() PMSSettings {
+	pms.lock.RLock()
+	defer pms.lock.RUnlock()
+	return *pms.settings
+}
+
 func (pms *pms) ModuleRun() {
-	pms.serv = NewSignalServer(pms.ctx, pms.settings.HttpParams, pms.logger)
+	pms.serv = NewServer(pms.ctx, pms.logger)
 	if err := pms.serv.Start(); err != nil {
 		pms.logger.Errorf("pms start error: %v", err)
 		panic(errors.Wrap(err, "pms start error"))
