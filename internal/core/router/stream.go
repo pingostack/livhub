@@ -13,7 +13,7 @@ import (
 type Stream interface {
 	GetFormat(fmtName string) (StreamFormat, error)
 	AddFrameSource(source deliver.FrameSource) error
-	AddFrameDestination(dest deliver.FrameDestination) error
+	AddFrameDestination(dest deliver.FrameDestination) (err error)
 	Close()
 }
 
@@ -24,8 +24,9 @@ type StreamImpl struct {
 	lock    sync.RWMutex
 	closed  bool
 	//pendingDests []deliver.FrameDestination
-	logger *logrus.Entry
-	sm     *sourcemanager.Instance
+	logger       *logrus.Entry
+	sm           *sourcemanager.Instance
+	paddingDests []deliver.FrameDestination
 }
 
 func NewStreamImpl(ctx context.Context, id string) Stream {
@@ -86,17 +87,14 @@ func (s *StreamImpl) AddFrameSource(source deliver.FrameSource) error {
 		return ErrFrameSourceExists
 	}
 
+	for _, dest := range s.paddingDests {
+		s.addFrameDestination(dest)
+	}
+
 	return nil
 }
 
-func (s *StreamImpl) AddFrameDestination(dest deliver.FrameDestination) (err error) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	if s.closed {
-		return ErrStreamClosed
-	}
-
+func (s *StreamImpl) addFrameDestination(dest deliver.FrameDestination) (err error) {
 	fmtName := dest.Metadata().FormatName()
 	format, ok := s.formats[fmtName]
 	if !ok {
@@ -111,6 +109,22 @@ func (s *StreamImpl) AddFrameDestination(dest deliver.FrameDestination) (err err
 	format.AddDestination(dest)
 
 	return nil
+}
+
+func (s *StreamImpl) AddFrameDestination(dest deliver.FrameDestination) (err error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if s.closed {
+		return ErrStreamClosed
+	}
+
+	if s.sm.DefaultSource() == nil {
+		s.paddingDests = append(s.paddingDests, dest)
+		return ErrPaddingDestination
+	}
+
+	return s.addFrameDestination(dest)
 }
 
 func (s *StreamImpl) Close() {

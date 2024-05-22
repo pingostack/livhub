@@ -165,7 +165,6 @@ func (ss *SignalServer) play(req Request, gc *gin.Context) error {
 		"stream":  req.Stream,
 	})
 
-	logger.Debug("play request")
 	hasAudio, hasVideo, hasData, err := sdpassistor.GetPayloadStatus(req.Data.SDP, webrtc.SDPTypeOffer)
 	if err != nil {
 		logger.WithError(err).Error("failed to get payload status")
@@ -206,8 +205,26 @@ func (ss *SignalServer) play(req Request, gc *gin.Context) error {
 
 	err = session.Join()
 	if err != nil {
-		logger.WithError(err).Error("join failed")
-		return errors.Wrap(err, "join failed")
+		if errors.Is(err, router.ErrPaddingDestination) {
+			timeout := settings().JoinTimeoutSecond
+			select {
+			case <-ss.ctx.Done():
+				return errors.Wrap(err, "context done")
+			case err = <-dest.SourceCompletePromise():
+				if err != nil {
+					logger.WithError(err).Error("join failed")
+					return errors.Wrap(err, "join failed")
+				} else {
+					logger.Info("join success")
+				}
+			case <-time.After(timeout * time.Second):
+				logger.WithField("timeout", timeout).Error("join timeout")
+				return errors.New("join timeout")
+			}
+		} else {
+			logger.WithError(err).Error("join failed")
+			return errors.Wrap(err, "join failed")
+		}
 	}
 
 	answer, err := dest.SetRemoteDescription(webrtc.SessionDescription{

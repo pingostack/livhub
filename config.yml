@@ -26,6 +26,8 @@ whip: {
 }
 
 pms: {
+  keyFrameIntervalSeconds: 0,
+  joinTimeoutSeconds: 10,
   http: {
     httpAddr: ":7002",
     cert: "",

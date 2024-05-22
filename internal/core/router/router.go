@@ -99,7 +99,6 @@ func (r *RouterImpl) addSubscriber(session Session) error {
 	r.subscribers[session.ID()] = session
 
 	if err := r.stream.AddFrameDestination(session.FrameDestination()); err != nil {
-		r.logger.WithError(err).Error("failed to add frame destination")
 		return errors.Wrap(err, "failed to add frame destination")
 	}
 

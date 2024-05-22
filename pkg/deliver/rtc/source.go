@@ -89,7 +89,7 @@ func (fs *FrameSource) SetRemoteDescription(remoteSdp webrtc.SessionDescription)
 }
 
 func (fs *FrameSource) gatheringTracks() error {
-	tracks, err := fs.remoteStream.GatheringTracks(true, true, 5*time.Second)
+	tracks, err := fs.remoteStream.GatheringTracks(true, true, 20*time.Second)
 	if err != nil {
 		return err
 	}
@@ -275,8 +275,4 @@ func (fs *FrameSource) close() {
 
 func (fs *FrameSource) Close() {
 	fs.close()
-}
-
-func (fs *FrameSource) Wait() {
-	<-fs.ctx.Done()
 }

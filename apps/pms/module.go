@@ -21,7 +21,8 @@ type ISignalServer interface {
 
 type PMSSettings struct {
 	httpserv.HttpParams    `json:"http" mapstructure:"http"`
-	KeyFrameIntervalSecond time.Duration `json:"keyFrameIntervalSecond" mapstructure:"keyFrameIntervalSecond"`
+	KeyFrameIntervalSecond time.Duration `json:"keyFrameIntervalSeconds" mapstructure:"keyFrameIntervalSeconds"`
+	JoinTimeoutSecond      time.Duration `json:"joinTimeoutSeconds" mapstructure:"joinTimeoutSeconds"`
 }
 
 type pms struct {

@@ -17,14 +17,15 @@ import (
 
 type FrameDestination struct {
 	deliver.FrameDestination
-	ctx         context.Context
-	cancel      context.CancelFunc
-	localStream *rtclib.LocalStream
-	logger      *logrus.Entry
-	metadata    deliver.Metadata
-	audioTrack  *rtclib.TrackLocl
-	videoTrack  *rtclib.TrackLocl
-	onceClose   sync.Once
+	ctx                     context.Context
+	cancel                  context.CancelFunc
+	localStream             *rtclib.LocalStream
+	logger                  *logrus.Entry
+	metadata                deliver.Metadata
+	audioTrack              *rtclib.TrackLocl
+	videoTrack              *rtclib.TrackLocl
+	onceClose               sync.Once
+	chSourceCompletePromise chan error
 }
 
 func NewFrameDestination(ctx context.Context, metadata deliver.Metadata, streamFactory rtclib.StreamFactory, preferTCP bool, logger *logrus.Entry) (fd *FrameDestination, err error) {
@@ -48,8 +49,9 @@ func NewFrameDestination(ctx context.Context, metadata deliver.Metadata, streamF
 	}()
 
 	fd = &FrameDestination{
-		metadata: metadata,
-		logger:   logger.WithField("obj", "frame-destination"),
+		metadata:                metadata,
+		chSourceCompletePromise: make(chan error, 1),
+		logger:                  logger.WithField("obj", "frame-destination"),
 	}
 
 	fd.ctx, fd.cancel = context.WithCancel(ctx)
@@ -120,9 +122,18 @@ func (fd *FrameDestination) addVideoTrack(vm *deliver.VideoMetadata) error {
 	return nil
 }
 
-func (fd *FrameDestination) OnSource(src deliver.FrameSource) error {
+func (fd *FrameDestination) OnSource(src deliver.FrameSource) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic: %v", r)
+			fd.logger.WithError(err).Error("OnSource panic")
+		}
+
+		fd.chSourceCompletePromise <- err
+	}()
+
 	if src.Metadata().Audio != nil {
-		if err := fd.addAudioTrack(src.Metadata().Audio); err != nil {
+		if err = fd.addAudioTrack(src.Metadata().Audio); err != nil {
 			return err
 		}
 	}
@@ -133,7 +144,12 @@ func (fd *FrameDestination) OnSource(src deliver.FrameSource) error {
 		}
 	}
 
-	return fd.FrameDestination.OnSource(src)
+	err = fd.FrameDestination.OnSource(src)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (fd *FrameDestination) OnFrame(frame deliver.Frame, attr deliver.Attributes) {
@@ -245,4 +261,8 @@ func (fd *FrameDestination) sendFIR() {
 		Type: deliver.FeedbackTypeVideo,
 		Cmd:  deliver.FeedbackCmdFIR,
 	})
+}
+
+func (fd *FrameDestination) SourceCompletePromise() <-chan error {
+	return fd.chSourceCompletePromise
 }

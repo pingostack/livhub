@@ -16,4 +16,5 @@ var (
 	ErrNilFrameSource       = errors.New("nil frame source")
 	ErrStreamTimeout        = errors.New("stream timeout")
 	ErrFrameSourceExists    = errors.New("frame source exists")
+	ErrPaddingDestination   = errors.New("padding destination")
 )
