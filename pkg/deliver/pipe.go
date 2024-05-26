@@ -2,6 +2,8 @@ package deliver
 
 import (
 	"context"
+
+	"github.com/gogf/gf/util/guid"
 )
 
 // in-endpoint -> pipe[FrameDestination -> FrameSource] -> out-endpoint
@@ -11,13 +13,16 @@ type MediaFramePipeImpl struct {
 	FrameSource
 	ctx    context.Context
 	cancel context.CancelFunc
+	id     string
 }
 
-func NewMediaFramePipe(ctx context.Context) MediaFramePipe {
-	m := &MediaFramePipeImpl{}
+func NewMediaFramePipe(ctx context.Context, fmtSettings FormatSettings) MediaFramePipe {
+	m := &MediaFramePipeImpl{
+		id: guid.S(),
+	}
 
 	m.ctx, m.cancel = context.WithCancel(ctx)
-	m.FrameDestination = NewFrameDestinationImpl(m.ctx, Metadata{})
+	m.FrameDestination = NewFrameDestinationImpl(m.ctx, fmtSettings)
 	m.FrameSource = NewFrameSourceImpl(m.ctx, Metadata{})
 
 	return m
@@ -52,4 +57,16 @@ func (m *MediaFramePipeImpl) Close() {
 
 func (m *MediaFramePipeImpl) Context() context.Context {
 	return m.FrameSource.Context()
+}
+
+func (m *MediaFramePipeImpl) ID() string {
+	return m.id
+}
+
+func (m *MediaFramePipeImpl) FormatSettings() FormatSettings {
+	return m.FrameDestination.FormatSettings()
+}
+
+func (m *MediaFramePipeImpl) Format() string {
+	return m.FrameDestination.Format()
 }

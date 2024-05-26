@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
+
+	"github.com/gogf/gf/util/guid"
 )
 
 type FrameDestinationImpl struct {
@@ -13,11 +15,14 @@ type FrameDestinationImpl struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	closed   bool
+	id       string
+	settings FormatSettings
 }
 
-func NewFrameDestinationImpl(ctx context.Context, metadata Metadata) FrameDestination {
+func NewFrameDestinationImpl(ctx context.Context, settings FormatSettings) FrameDestination {
 	fd := &FrameDestinationImpl{
-		metadata: metadata,
+		settings: settings,
+		id:       guid.S(),
 	}
 
 	fd.ctx, fd.cancel = context.WithCancel(ctx)
@@ -98,4 +103,16 @@ func (fd *FrameDestinationImpl) Close() {
 
 func (fd *FrameDestinationImpl) Context() context.Context {
 	return fd.ctx
+}
+
+func (fd *FrameDestinationImpl) ID() string {
+	return fd.id
+}
+
+func (fd *FrameDestinationImpl) Format() string {
+	return fd.settings.PacketType.String()
+}
+
+func (fd *FrameDestinationImpl) FormatSettings() FormatSettings {
+	return fd.settings
 }

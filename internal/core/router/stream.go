@@ -98,7 +98,7 @@ func (s *StreamImpl) addFrameDestination(dest deliver.FrameDestination) (err err
 	fmtName := dest.Metadata().FormatName()
 	format, ok := s.formats[fmtName]
 	if !ok {
-		format, err = NewStreamFormat(s.ctx, *dest.Metadata(), WithFrameSourceManager(s.sm))
+		format, err = NewStreamFormat(s.ctx, dest.FormatSettings(), WithFrameSourceManager(s.sm))
 		if err != nil {
 			return errors.Wrap(err, "failed to create stream format")
 		}

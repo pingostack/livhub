@@ -2,16 +2,17 @@ package rtc
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"sync"
 
 	"github.com/pingostack/neon/pkg/deliver"
 	"github.com/pingostack/neon/pkg/rtclib"
+	"github.com/pingostack/neon/pkg/rtclib/sdpassistor"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -27,7 +28,7 @@ type FrameDestination struct {
 	chSourceCompletePromise chan error
 }
 
-func NewFrameDestination(ctx context.Context, streamFactory rtclib.StreamFactory, preferTCP bool, logger *logrus.Entry) (fd *FrameDestination, err error) {
+func NewFrameDestination(ctx context.Context, streamFactory rtclib.StreamFactory, preferTCP bool, sd webrtc.SessionDescription, logger *logrus.Entry) (fd *FrameDestination, err error) {
 	if logger == nil {
 		logger = logrus.WithField("obj", "frame-destination")
 	} else {
@@ -65,9 +66,13 @@ func NewFrameDestination(ctx context.Context, streamFactory rtclib.StreamFactory
 		return nil, err
 	}
 
-	fd.FrameDestination = deliver.NewFrameDestinationImpl(fd.ctx, deliver.Metadata{
-		PacketType: deliver.PacketTypeRtp,
-	})
+	payloadUnion, err := sdpassistor.NewPayloadUnion(sd)
+	if err != nil {
+		logger.WithError(err).Error("failed to create payload union")
+		return nil, errors.Wrap(err, "failed to create payload union")
+	}
+
+	fd.FrameDestination = deliver.NewFrameDestinationImpl(fd.ctx, convFormatSettings(payloadUnion))
 
 	return fd, nil
 }

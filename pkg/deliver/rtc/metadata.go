@@ -8,29 +8,57 @@ import (
 	"github.com/pion/webrtc/v4"
 )
 
+func convAudioMetadata(audioPayload *sdpassistor.Payload) *deliver.AudioMetadata {
+	if audioPayload == nil {
+		return nil
+	}
+
+	channels := uint64(0)
+	var err error
+	if audioPayload.EncodingParameters != "" {
+		channels, err = strconv.ParseUint(audioPayload.EncodingParameters, 10, 8)
+		if err != nil {
+			channels = 0
+		}
+	}
+	return &deliver.AudioMetadata{
+		Codec:          audioPayload.EncodingName,
+		CodecType:      deliver.ConvCodecType(audioPayload.EncodingName),
+		RtpPayloadType: audioPayload.PayloadType,
+		SampleRate:     audioPayload.ClockRate,
+		Channels:       uint8(channels),
+	}
+}
+
+func convVideoMetadata(videoPayload *sdpassistor.Payload) *deliver.VideoMetadata {
+	if videoPayload == nil {
+		return nil
+	}
+
+	// TODO: get width and height and fps
+	width := 0
+	height := 0
+	fps := 0
+
+	return &deliver.VideoMetadata{
+		Codec:          videoPayload.EncodingName,
+		CodecType:      deliver.ConvCodecType(videoPayload.EncodingName),
+		RtpPayloadType: videoPayload.PayloadType,
+		ClockRate:      videoPayload.ClockRate,
+		Width:          width,
+		Height:         height,
+		FPS:            fps,
+	}
+}
+
 func convMetadata(pu *sdpassistor.PayloadUnion) deliver.Metadata {
 	deliverMd := deliver.Metadata{}
 	if pu.HasAudio() {
-		deliverMd.Audio = &deliver.AudioMetadata{
-			Codec:          pu.Audio.EncodingName,
-			CodecType:      deliver.ConvCodecType(pu.Audio.EncodingName),
-			RtpPayloadType: pu.Audio.PayloadType,
-			SampleRate:     pu.Audio.ClockRate,
-		}
-
-		if pu.Audio.EncodingParameters != "" {
-			channels, _ := strconv.ParseUint(pu.Audio.EncodingParameters, 10, 8)
-			deliverMd.Audio.Channels = uint8(channels)
-		}
+		deliverMd.Audio = convAudioMetadata(pu.Audio[0])
 	}
 
 	if pu.HasVideo() {
-		deliverMd.Video = &deliver.VideoMetadata{
-			Codec:          pu.Video.EncodingName,
-			CodecType:      deliver.ConvCodecType(pu.Video.EncodingName),
-			RtpPayloadType: pu.Video.PayloadType,
-			ClockRate:      pu.Video.ClockRate,
-		}
+		deliverMd.Video = convVideoMetadata(pu.Video[0])
 	}
 
 	if pu.HasData() {
@@ -42,6 +70,25 @@ func convMetadata(pu *sdpassistor.PayloadUnion) deliver.Metadata {
 	deliverMd.PacketType = deliver.PacketTypeRtp
 
 	return deliverMd
+}
+
+func convFormatSettings(pu *sdpassistor.PayloadUnion) deliver.FormatSettings {
+	fs := deliver.FormatSettings{}
+	for _, p := range pu.Audio {
+		fs.AudioCandidates = append(fs.AudioCandidates, *convAudioMetadata(p))
+	}
+
+	for _, p := range pu.Video {
+		fs.VideoCandidates = append(fs.VideoCandidates, *convVideoMetadata(p))
+	}
+
+	if pu.HasData() {
+		fs.DataCandidates = append(fs.DataCandidates, deliver.DataMetadata{
+			Codec: deliver.CodecTypeNone.String(),
+		})
+	}
+
+	return fs
 }
 
 func NewMetadataFromSDP(sdpStr string) (deliver.Metadata, error) {

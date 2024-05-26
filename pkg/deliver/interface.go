@@ -23,6 +23,12 @@ type FrameDestinationDeliver interface {
 
 type Context interface {
 	Context() context.Context
+	ID() string
+}
+
+type FrameFormat interface {
+	Format() string
+	FormatSettings() FormatSettings
 }
 
 type FrameDestination interface {
@@ -31,6 +37,7 @@ type FrameDestination interface {
 	FrameDestinationDeliver
 	EnableClose
 	EnableMetaData
+	FrameFormat
 }
 
 type FrameSourceReceiver interface {
@@ -52,6 +59,7 @@ type FrameSource interface {
 	FrameSourceReceiver
 	EnableClose
 	EnableMetaData
+	FrameFormat
 }
 
 type MediaFramePipe interface {
@@ -62,4 +70,5 @@ type MediaFramePipe interface {
 	FrameSourceReceiver
 	EnableClose
 	EnableMetaData
+	FrameFormat
 }

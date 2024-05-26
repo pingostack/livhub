@@ -185,7 +185,10 @@ func (ss *SignalServer) play(req Request, gc *gin.Context) error {
 	}, logger)
 
 	dest, err := rtc.NewFrameDestination(ss.ctx, interRtc.StreamFactory(),
-		false, logger)
+		false, webrtc.SessionDescription{
+			Type: webrtc.SDPTypeOffer,
+			SDP:  req.Data.SDP,
+		}, logger)
 	if err != nil {
 		logger.WithError(err).Error("failed to create frame destination")
 		return errors.Wrap(err, "failed create frame destination")

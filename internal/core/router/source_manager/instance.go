@@ -38,7 +38,7 @@ func (i *Instance) RemoveSource(id string) {
 	defer i.lock.Unlock()
 
 	delete(i.sources, id)
-	if i.defaultSource.Metadata().GUID == id {
+	if i.defaultSource.ID() == id {
 		i.defaultSource = nil
 	}
 
@@ -83,11 +83,11 @@ func (i *Instance) AddIfNotExist(source deliver.FrameSource) bool {
 	i.lock.Lock()
 	defer i.lock.Unlock()
 
-	if _, ok := i.sources[source.Metadata().GUID]; ok {
+	if _, ok := i.sources[source.ID()]; ok {
 		return false
 	}
 
-	i.sources[source.Metadata().GUID] = source
+	i.sources[source.ID()] = source
 	i.defaultSource = source
 
 	return true

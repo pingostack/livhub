@@ -21,9 +21,9 @@ type Payload struct {
 }
 
 type PayloadUnion struct {
-	Audio *Payload `json:"audio"`
-	Video *Payload `json:"video"`
-	Data  *Payload `json:"data"`
+	Audio []*Payload `json:"audio"`
+	Video []*Payload `json:"video"`
+	Data  []*Payload `json:"data"`
 }
 
 func NewPayloadUnion(sd webrtc.SessionDescription) (pu *PayloadUnion, err error) {
@@ -41,12 +41,12 @@ func NewPayloadUnion(sd webrtc.SessionDescription) (pu *PayloadUnion, err error)
 
 	pu = &PayloadUnion{}
 	for _, p := range payloadUnits {
-		if p.Kind == "audio" && pu.Audio == nil {
-			pu.Audio = p
-		} else if p.Kind == "video" && pu.Video == nil {
-			pu.Video = p
+		if p.Kind == "audio" {
+			pu.Audio = append(pu.Audio, p)
+		} else if p.Kind == "video" {
+			pu.Video = append(pu.Video, p)
 		} else if p.Kind == "data" && pu.Data == nil {
-			pu.Data = p
+			pu.Data = append(pu.Data, p)
 		}
 	}
 
@@ -59,13 +59,13 @@ func (pu *PayloadUnion) String() string {
 }
 
 func (pu *PayloadUnion) HasAudio() bool {
-	return pu.Audio != nil
+	return len(pu.Audio) > 0
 }
 
 func (pu *PayloadUnion) HasVideo() bool {
-	return pu.Video != nil
+	return len(pu.Video) > 0
 }
 
 func (pu *PayloadUnion) HasData() bool {
-	return pu.Data != nil
+	return len(pu.Data) > 0
 }

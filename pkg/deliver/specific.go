@@ -228,7 +228,6 @@ type Metadata struct {
 	Video      *VideoMetadata `json:"video"`
 	Data       *DataMetadata  `json:"data"`
 	PacketType PacketType     `json:"packetType"`
-	GUID       string         `json:"guid"`
 }
 
 func (md *Metadata) String() string {
@@ -296,6 +295,15 @@ func (md *Metadata) FormatName() string {
 	return md.PacketType.String()
 }
 
+func (md *Metadata) ToFormatSettings() FormatSettings {
+	return FormatSettings{
+		AudioCandidates: []AudioMetadata{*md.Audio},
+		VideoCandidates: []VideoMetadata{*md.Video},
+		DataCandidates:  []DataMetadata{*md.Data},
+		PacketType:      md.PacketType,
+	}
+}
+
 type FeedbackType int
 type FeedbackCmd int
 
@@ -319,4 +327,11 @@ const (
 type FeedbackMsg struct {
 	Type FeedbackType
 	Cmd  FeedbackCmd
+}
+
+type FormatSettings struct {
+	AudioCandidates []AudioMetadata `json:"audioCandidates"`
+	VideoCandidates []VideoMetadata `json:"videoCandidates"`
+	DataCandidates  []DataMetadata  `json:"dataCandidates"`
+	PacketType      PacketType      `json:"packetType"`
 }

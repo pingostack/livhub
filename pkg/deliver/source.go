@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
+
+	"github.com/gogf/gf/util/guid"
 )
 
 type DestinationInfo struct {
@@ -20,11 +22,13 @@ type FrameSourceImpl struct {
 	cancel    context.CancelFunc
 	closed    bool
 	metadata  Metadata
+	id        string
 }
 
 func NewFrameSourceImpl(ctx context.Context, metadata Metadata) FrameSource {
 	fs := &FrameSourceImpl{
 		metadata:  metadata,
+		id:        guid.S(),
 		dests:     make([]FrameDestination, 0),
 		destIndex: make(map[FrameDestination]FrameDestination),
 	}
@@ -174,6 +178,18 @@ func (fs *FrameSourceImpl) DestinationCount() int {
 
 func (fs *FrameSourceImpl) Context() context.Context {
 	return fs.ctx
+}
+
+func (fs *FrameSourceImpl) ID() string {
+	return fs.id
+}
+
+func (fs *FrameSourceImpl) Format() string {
+	return fs.metadata.ToFormatSettings().PacketType.String()
+}
+
+func (fs *FrameSourceImpl) FormatSettings() FormatSettings {
+	return fs.metadata.ToFormatSettings()
 }
 
 func AddDestination[SRC FrameSource, DEST FrameDestination](src SRC, dest DEST) error {

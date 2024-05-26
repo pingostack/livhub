@@ -26,7 +26,7 @@ func WithFrameSourceManager(sm *sourcemanager.Instance) StreamFormatOption {
 	}
 }
 
-func NewStreamFormat(ctx context.Context, _ deliver.Metadata, opts ...StreamFormatOption) (StreamFormat, error) {
+func NewStreamFormat(ctx context.Context, fmtSettings deliver.FormatSettings, opts ...StreamFormatOption) (StreamFormat, error) {
 	fmt := &StreamFormatImpl{}
 
 	fmt.ctx, fmt.cancel = context.WithCancel(ctx)
@@ -41,7 +41,7 @@ func NewStreamFormat(ctx context.Context, _ deliver.Metadata, opts ...StreamForm
 		return nil, ErrNilFrameSource
 	}
 
-	fmt.MediaFramePipe = deliver.NewMediaFramePipe(ctx)
+	fmt.MediaFramePipe = deliver.NewMediaFramePipe(ctx, fmtSettings)
 
 	deliver.AddDestination(fmt.sm.DefaultSource(), fmt)
 
