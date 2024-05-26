@@ -85,6 +85,7 @@ func (fd *FrameDestinationImpl) DeliverFeedback(fb FeedbackMsg) error {
 }
 
 func (fd *FrameDestinationImpl) OnMetaData(metadata *Metadata) {
+	fd.metadata = *metadata
 }
 
 func (fd *FrameDestinationImpl) Metadata() *Metadata {

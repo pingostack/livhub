@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-
-	"github.com/pkg/errors"
 )
 
 type DestinationInfo struct {
@@ -67,20 +65,14 @@ func (fs *FrameSourceImpl) addDestination(dest FrameDestination) error {
 		return ErrFrameSourceClosed
 	}
 
-	if fs.metadata.HasAudio() && !fs.metadata.EqualAudioCodec(dest.Metadata()) {
-		return errors.Wrap(ErrCodecNotSupported, fmt.Sprintf("source audio codec %s not match destination audio codec %s", fs.metadata.Audio.Codec, dest.Metadata().Audio.Codec))
-	}
-
-	if fs.metadata.HasVideo() && !fs.metadata.EqualVideoCodec(dest.Metadata()) {
-		return errors.Wrap(ErrCodecNotSupported, fmt.Sprintf("source video codec %s not match destination video codec %s", fs.metadata.Video.Codec, dest.Metadata().Video.Codec))
-	}
-
 	if _, ok := fs.destIndex[dest]; ok {
 		return ErrFrameDestinationExists
 	}
 
 	fs.dests = append(fs.dests, dest)
 	fs.destIndex[dest] = dest
+
+	dest.OnMetaData(&fs.metadata)
 
 	return nil
 }
@@ -153,6 +145,8 @@ func (fs *FrameSourceImpl) DeliverMetaData(metadata Metadata) error {
 	if fs.closed {
 		return ErrFrameSourceClosed
 	}
+
+	fs.metadata = metadata
 
 	for _, d := range fs.dests {
 		d.OnMetaData(&metadata)

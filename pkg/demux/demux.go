@@ -19,7 +19,7 @@ type NoopDemux struct {
 
 func NewNoopDemux(ctx context.Context, md deliver.Metadata) *NoopDemux {
 	return &NoopDemux{
-		MediaFramePipe: deliver.NewMediaFramePipe(ctx, md, md),
+		MediaFramePipe: deliver.NewMediaFramePipe(ctx),
 	}
 }
 

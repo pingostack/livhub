@@ -15,7 +15,6 @@ type StreamFormatImpl struct {
 	deliver.MediaFramePipe
 	ctx    context.Context
 	cancel context.CancelFunc
-	md     deliver.Metadata
 	sm     *sourcemanager.Instance
 }
 
@@ -27,10 +26,8 @@ func WithFrameSourceManager(sm *sourcemanager.Instance) StreamFormatOption {
 	}
 }
 
-func NewStreamFormat(ctx context.Context, md deliver.Metadata, opts ...StreamFormatOption) (StreamFormat, error) {
-	fmt := &StreamFormatImpl{
-		md: md,
-	}
+func NewStreamFormat(ctx context.Context, _ deliver.Metadata, opts ...StreamFormatOption) (StreamFormat, error) {
+	fmt := &StreamFormatImpl{}
 
 	fmt.ctx, fmt.cancel = context.WithCancel(ctx)
 
@@ -44,35 +41,14 @@ func NewStreamFormat(ctx context.Context, md deliver.Metadata, opts ...StreamFor
 		return nil, ErrNilFrameSource
 	}
 
-	fmt.MediaFramePipe = deliver.NewMediaFramePipe(ctx, *fmt.sm.DefaultSource().Metadata(), md)
+	fmt.MediaFramePipe = deliver.NewMediaFramePipe(ctx)
 
 	deliver.AddDestination(fmt.sm.DefaultSource(), fmt)
 
 	return fmt, nil
 }
 
-func (fmt *StreamFormatImpl) AddDestination(dest deliver.FrameDestination) error {
-	return deliver.AddDestination(fmt, dest)
-}
-
-func (fmt *StreamFormatImpl) RemoveDestination(dest deliver.FrameDestination) error {
-
-	return fmt.MediaFramePipe.RemoveDestination(dest)
-}
-
-func (fmt *StreamFormatImpl) OnFeedback(feedback deliver.FeedbackMsg) {
-	fmt.MediaFramePipe.OnFeedback(feedback)
-}
-
 func (fmt *StreamFormatImpl) Close() {
 	fmt.MediaFramePipe.Close()
 	fmt.cancel()
-}
-
-func (fmt *StreamFormatImpl) Metadata() *deliver.Metadata {
-	return &fmt.md
-}
-
-func (fmt *StreamFormatImpl) DeliverFeedback(fb deliver.FeedbackMsg) error {
-	return fmt.MediaFramePipe.DeliverFeedback(fb)
 }

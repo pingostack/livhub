@@ -184,13 +184,7 @@ func (ss *SignalServer) play(req Request, gc *gin.Context) error {
 		HasDataChannel: hasData,
 	}, logger)
 
-	metadata, err := rtc.NewMetadataFromSDP(req.Data.SDP)
-	if err != nil {
-		logger.WithError(err).Error("failed to create metadata from sdp")
-		return errors.Wrap(err, "failed to create metadata from sdp")
-	}
-
-	dest, err := rtc.NewFrameDestination(ss.ctx, metadata, interRtc.StreamFactory(),
+	dest, err := rtc.NewFrameDestination(ss.ctx, interRtc.StreamFactory(),
 		false, logger)
 	if err != nil {
 		logger.WithError(err).Error("failed to create frame destination")

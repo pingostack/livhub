@@ -21,8 +21,12 @@ type FrameDestinationDeliver interface {
 	unsetSource()
 }
 
-type FrameDestination interface {
+type Context interface {
 	Context() context.Context
+}
+
+type FrameDestination interface {
+	Context
 	FrameDestinationReceiver
 	FrameDestinationDeliver
 	EnableClose
@@ -43,7 +47,7 @@ type FrameSourceDeliver interface {
 }
 
 type FrameSource interface {
-	Context() context.Context
+	Context
 	FrameSourceDeliver
 	FrameSourceReceiver
 	EnableClose
@@ -51,7 +55,7 @@ type FrameSource interface {
 }
 
 type MediaFramePipe interface {
-	Context() context.Context
+	Context
 	FrameDestinationReceiver
 	FrameDestinationDeliver
 	FrameSourceDeliver

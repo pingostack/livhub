@@ -13,18 +13,18 @@ type MediaFramePipeImpl struct {
 	cancel context.CancelFunc
 }
 
-func NewMediaFramePipe(ctx context.Context, inMd Metadata, outMd Metadata) MediaFramePipe {
+func NewMediaFramePipe(ctx context.Context) MediaFramePipe {
 	m := &MediaFramePipeImpl{}
 
 	m.ctx, m.cancel = context.WithCancel(ctx)
-	m.FrameDestination = NewFrameDestinationImpl(m.ctx, inMd)
-	m.FrameSource = NewFrameSourceImpl(m.ctx, outMd)
+	m.FrameDestination = NewFrameDestinationImpl(m.ctx, Metadata{})
+	m.FrameSource = NewFrameSourceImpl(m.ctx, Metadata{})
 
 	return m
 }
 
 func (m *MediaFramePipeImpl) AddDestination(dest FrameDestination) error {
-	return AddDestination(m.FrameSource, dest)
+	return AddDestination(m, dest)
 }
 
 func (m *MediaFramePipeImpl) OnFrame(frame Frame, attr Attributes) {
@@ -37,6 +37,11 @@ func (m *MediaFramePipeImpl) OnFeedback(fb FeedbackMsg) {
 
 func (m *MediaFramePipeImpl) Metadata() *Metadata {
 	return m.FrameSource.Metadata()
+}
+
+func (m *MediaFramePipeImpl) OnMetaData(metadata *Metadata) {
+	m.FrameDestination.OnMetaData(metadata)
+	m.FrameSource.DeliverMetaData(*metadata)
 }
 
 func (m *MediaFramePipeImpl) Close() {

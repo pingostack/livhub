@@ -21,14 +21,13 @@ type FrameDestination struct {
 	cancel                  context.CancelFunc
 	localStream             *rtclib.LocalStream
 	logger                  *logrus.Entry
-	metadata                deliver.Metadata
 	audioTrack              *rtclib.TrackLocl
 	videoTrack              *rtclib.TrackLocl
 	onceClose               sync.Once
 	chSourceCompletePromise chan error
 }
 
-func NewFrameDestination(ctx context.Context, metadata deliver.Metadata, streamFactory rtclib.StreamFactory, preferTCP bool, logger *logrus.Entry) (fd *FrameDestination, err error) {
+func NewFrameDestination(ctx context.Context, streamFactory rtclib.StreamFactory, preferTCP bool, logger *logrus.Entry) (fd *FrameDestination, err error) {
 	if logger == nil {
 		logger = logrus.WithField("obj", "frame-destination")
 	} else {
@@ -49,7 +48,6 @@ func NewFrameDestination(ctx context.Context, metadata deliver.Metadata, streamF
 	}()
 
 	fd = &FrameDestination{
-		metadata:                metadata,
 		chSourceCompletePromise: make(chan error, 1),
 		logger:                  logger.WithField("obj", "frame-destination"),
 	}
@@ -67,7 +65,9 @@ func NewFrameDestination(ctx context.Context, metadata deliver.Metadata, streamF
 		return nil, err
 	}
 
-	fd.FrameDestination = deliver.NewFrameDestinationImpl(fd.ctx, metadata)
+	fd.FrameDestination = deliver.NewFrameDestinationImpl(fd.ctx, deliver.Metadata{
+		PacketType: deliver.PacketTypeRtp,
+	})
 
 	return fd, nil
 }
@@ -92,8 +92,6 @@ func (fd *FrameDestination) SetRemoteDescription(remoteSdp webrtc.SessionDescrip
 		fd.logger.WithError(err).Error("failed to set remote description")
 		return webrtc.SessionDescription{}, err
 	}
-
-	fd.metadata = convMetadata(fd.localStream.PayloadUnion())
 
 	return localSdp, nil
 }
@@ -132,16 +130,12 @@ func (fd *FrameDestination) OnSource(src deliver.FrameSource) (err error) {
 		fd.chSourceCompletePromise <- err
 	}()
 
-	if src.Metadata().Audio != nil {
-		if err = fd.addAudioTrack(src.Metadata().Audio); err != nil {
-			return err
-		}
+	if err = fd.addAudioTrack(src.Metadata().Audio); err != nil {
+		return err
 	}
 
-	if src.Metadata().Video != nil {
-		if err := fd.addVideoTrack(src.Metadata().Video); err != nil {
-			return err
-		}
+	if err := fd.addVideoTrack(src.Metadata().Video); err != nil {
+		return err
 	}
 
 	err = fd.FrameDestination.OnSource(src)
@@ -153,6 +147,11 @@ func (fd *FrameDestination) OnSource(src deliver.FrameSource) (err error) {
 }
 
 func (fd *FrameDestination) OnFrame(frame deliver.Frame, attr deliver.Attributes) {
+	defer func() {
+		if r := recover(); r != nil {
+			fd.logger.WithField("error", r).Error("OnFrame panic")
+		}
+	}()
 	if frame.PacketType != deliver.PacketTypeRtp {
 		fd.logger.WithField("packetType", frame.PacketType).Error("invalid packet type")
 		return
@@ -161,8 +160,16 @@ func (fd *FrameDestination) OnFrame(frame deliver.Frame, attr deliver.Attributes
 	var track *rtclib.TrackLocl
 	if frame.Codec.IsAudio() {
 		track = fd.audioTrack
+		if track == nil {
+			fd.logger.WithField("codec", frame.Codec).Error("audio track not found")
+			return
+		}
 	} else if frame.Codec.IsVideo() {
 		track = fd.videoTrack
+		if track == nil {
+			fd.logger.WithField("codec", frame.Codec).Error("video track not found")
+			return
+		}
 	} else {
 		fd.logger.WithField("codec", frame.Codec).Error("invalid codec")
 		return
