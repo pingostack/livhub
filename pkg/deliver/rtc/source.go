@@ -2,7 +2,6 @@ package rtc
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -10,19 +9,21 @@ import (
 
 	"github.com/pingostack/neon/pkg/deliver"
 	"github.com/pingostack/neon/pkg/rtclib"
+	"github.com/pingostack/neon/pkg/rtclib/sdpassistor"
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v4"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
 type FrameSource struct {
 	deliver.FrameSource
-	ctx          context.Context
-	cancel       context.CancelFunc
-	remoteStream *rtclib.RemoteStream
-	logger       *logrus.Entry
+	ctx    context.Context
+	cancel context.CancelFunc
+	*rtclib.RemoteStream
+	logger *logrus.Entry
 	//remoteSdp    webrtc.SessionDescription
-	//localSdp webrtc.SessionDescription
+	//lsdp webrtc.SessionDescription
 	metadata         deliver.Metadata
 	keyFrameInterval time.Duration
 	videoTrack       *rtclib.TrackRemote
@@ -44,8 +45,8 @@ func NewFrameSource(ctx context.Context, streamFactory rtclib.StreamFactory, pre
 		}
 
 		if err != nil {
-			if fs != nil && fs.remoteStream != nil {
-				fs.remoteStream.Close()
+			if fs != nil && fs.RemoteStream != nil {
+				fs.RemoteStream.Close()
 			}
 		}
 	}()
@@ -57,7 +58,7 @@ func NewFrameSource(ctx context.Context, streamFactory rtclib.StreamFactory, pre
 
 	fs.ctx, fs.cancel = context.WithCancel(ctx)
 
-	fs.remoteStream, err = streamFactory.NewRemoteStream(rtclib.RemoteStreamParams{
+	fs.RemoteStream, err = streamFactory.NewRemoteStream(rtclib.RemoteStreamParams{
 		Ctx:       fs.ctx,
 		Logger:    fs.logger,
 		PreferTCP: preferTCP,
@@ -71,25 +72,67 @@ func NewFrameSource(ctx context.Context, streamFactory rtclib.StreamFactory, pre
 	return fs, nil
 }
 
-func (fs *FrameSource) SetRemoteDescription(remoteSdp webrtc.SessionDescription) (localSdp webrtc.SessionDescription, err error) {
-	//return fs.remoteStream.SetRemoteDescription(remoteSdp)
-
-	localSdp, err = fs.remoteStream.SetRemoteDescription(remoteSdp)
+func (fs *FrameSource) createFrameSource(sdp webrtc.SessionDescription) (err error) {
+	// get metadata
+	var payloadUnion *sdpassistor.PayloadUnion
+	payloadUnion, err = sdpassistor.NewPayloadUnion(sdp)
 	if err != nil {
-		fs.logger.WithError(err).Error("failed to set remote description")
-		return
+		return errors.Wrap(err, "failed to create payload union")
+	}
+	fs.metadata = convMetadata(payloadUnion)
+
+	fs.logger.WithField("metadata", fs.metadata).Debug("metadata")
+
+	if fs.RemoteStream.LocalSdpType() == webrtc.SDPTypeAnswer {
+		fs.FrameSource = deliver.NewFrameSourceImpl(fs.ctx, fs.metadata)
 	}
 
-	fs.metadata = convMetadata(fs.remoteStream.PayloadUnion())
-	fs.FrameSource = deliver.NewFrameSourceImpl(fs.ctx, fs.metadata)
+	return nil
+}
 
+func (fs *FrameSource) SetRemoteDescription(remoteSdp webrtc.SessionDescription) (err error) {
+	err = fs.RemoteStream.SetRemoteDescription(remoteSdp)
+	if err != nil {
+		return errors.Wrap(err, "failed to set remote description")
+	}
+
+	if fs.RemoteStream.LocalSdpType() == webrtc.SDPTypeOffer {
+		err = fs.createFrameSource(remoteSdp)
+		if err != nil {
+			return errors.Wrap(err, "failed to create frame source")
+		}
+	}
+
+	return nil
+}
+
+func (fs *FrameSource) CreateAnswer(options *webrtc.AnswerOptions) (webrtc.SessionDescription, error) {
+	answer, err := fs.RemoteStream.CreateAnswer(options)
+	if err != nil {
+		return webrtc.SessionDescription{}, errors.Wrap(err, "failed to create answer")
+	}
+
+	err = fs.createFrameSource(answer)
+	if err != nil {
+		return webrtc.SessionDescription{}, errors.Wrap(err, "failed to create frame source")
+	}
+
+	return answer, nil
+}
+
+func (fs *FrameSource) Start() (err error) {
+	if !fs.RemoteStream.RemoteSdpSetted() || !fs.RemoteStream.LocalSdpSetted() {
+		return errors.New("remote sdp not setted or local sdp already setted")
+	}
+
+	// start read rtp
 	go fs.readRTP()
 
 	return
 }
 
 func (fs *FrameSource) gatheringTracks() error {
-	tracks, err := fs.remoteStream.GatheringTracks(true, true, 20*time.Second)
+	tracks, err := fs.RemoteStream.GatheringTracks(true, true, 20*time.Second)
 	if err != nil {
 		return err
 	}
@@ -144,7 +187,7 @@ func (fs *FrameSource) sendPLI() {
 		return
 	}
 
-	err := fs.remoteStream.PeerConnection.WriteRTCP([]rtcp.Packet{
+	err := fs.RemoteStream.PeerConnection.WriteRTCP([]rtcp.Packet{
 		&rtcp.PictureLossIndication{
 			MediaSSRC: uint32(fs.videoTrack.SSRC()),
 		},
@@ -241,7 +284,7 @@ func (fs *FrameSource) loopReadRTP(track *rtclib.TrackRemote) {
 }
 
 // func (fs *FrameSource) LocalSdp() webrtc.SessionDescription {
-// 	return fs.localSdp
+// 	return fs.lsdp
 // }
 
 func (fs *FrameSource) Metadata() *deliver.Metadata {
@@ -267,7 +310,7 @@ func (fs *FrameSource) OnFeedback(feedback deliver.FeedbackMsg) {
 func (fs *FrameSource) close() {
 	fs.onceClose.Do(func() {
 		fs.cancel()
-		fs.remoteStream.Close()
+		fs.RemoteStream.Close()
 		fs.FrameSource.Close()
 		fs.logger.Debug("FrameSource closed")
 	})

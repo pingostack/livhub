@@ -72,11 +72,16 @@ type Transport struct {
 	onICEGathererStateComplete func()
 	resetShortConnOnICERestart atomic.Bool
 	pendingRemoteCandidates    []*webrtc.ICECandidateInit
-	payloadUnion               *sdpassistor.PayloadUnion
+	localSdpType               webrtc.SDPType
+	localSdpSetted             bool
+	remoteSdpSetted            bool
 }
 
 func NewTransport(opts ...TransportOpt) (*Transport, error) {
-	t := &Transport{}
+	t := &Transport{
+		localSdpType: webrtc.SDPTypeOffer,
+	}
+
 	for _, opt := range opts {
 		opt(t)
 	}
@@ -620,20 +625,64 @@ func (t *Transport) validate() error {
 	return nil
 }
 
-func (t *Transport) SetRemoteDescription(sd webrtc.SessionDescription) (lsdp webrtc.SessionDescription, err error) {
+func (t *Transport) SetRemoteDescription(sd webrtc.SessionDescription) (err error) {
+	if sd.Type == webrtc.SDPTypeOffer {
+		t.localSdpType = webrtc.SDPTypeAnswer
+	}
+
 	sd, err = sdpassistor.FilterCandidates(sd, t.preferTCP.Load())
 	if err != nil {
 		err = errors.Wrap(err, "failed to filter sdp")
-		return lsdp, err
+		return err
 	}
 
-	if sd.Type == webrtc.SDPTypeOffer {
-		if err = t.PeerConnection.SetRemoteDescription(sd); err != nil {
-			err = errors.Wrap(err, "failed to set remote description")
-			return
-		}
+	if err = t.PeerConnection.SetRemoteDescription(sd); err != nil {
+		err = errors.Wrap(err, "failed to set remote description")
+		return
+	}
 
-		lsdp, err = t.PeerConnection.CreateAnswer(nil)
+	t.remoteSdpSetted = true
+
+	return
+}
+
+func (t *Transport) CreateOffer(options *webrtc.OfferOptions) (lsdp webrtc.SessionDescription, err error) {
+	lsdp, err = t.PeerConnection.CreateOffer(options)
+	if err != nil {
+		err = errors.Wrap(err, "failed to create offer")
+		return
+	}
+
+	if err = t.PeerConnection.SetLocalDescription(lsdp); err != nil {
+		err = errors.Wrap(err, "failed to set local description")
+		return
+	}
+
+	t.localSdpSetted = true
+
+	return
+}
+
+func (t *Transport) CreateAnswer(options *webrtc.AnswerOptions) (lsdp webrtc.SessionDescription, err error) {
+	lsdp, err = t.PeerConnection.CreateAnswer(options)
+	if err != nil {
+		err = errors.Wrap(err, "failed to create answer")
+		return
+	}
+
+	if err = t.PeerConnection.SetLocalDescription(lsdp); err != nil {
+		err = errors.Wrap(err, "failed to set local description")
+		return
+	}
+
+	t.localSdpSetted = true
+
+	return
+}
+
+func (t *Transport) CreateLocalDescription() (lsdp webrtc.SessionDescription, err error) {
+	if t.localSdpType == webrtc.SDPTypeOffer {
+		lsdp, err = t.PeerConnection.CreateOffer(nil)
 		if err != nil {
 			err = errors.Wrap(err, "failed to create answer")
 			return
@@ -644,27 +693,19 @@ func (t *Transport) SetRemoteDescription(sd webrtc.SessionDescription) (lsdp web
 			return
 		}
 	} else {
-		if err = t.PeerConnection.SetRemoteDescription(sd); err != nil {
-			err = errors.Wrap(err, "failed to set remote description")
+		lsdp, err = t.PeerConnection.CreateAnswer(nil)
+		if err != nil {
+			err = errors.Wrap(err, "failed to create offer")
+			return
+		}
+
+		if err = t.PeerConnection.SetLocalDescription(lsdp); err != nil {
+			err = errors.Wrap(err, "failed to set local description")
 			return
 		}
 	}
 
-	gatherComplete := webrtc.GatheringCompletePromise(t.PeerConnection)
-	<-gatherComplete
-
-	localSdp := t.PeerConnection.LocalDescription()
-	if localSdp == nil {
-		err = errors.New("local description is nil")
-		return
-	}
-
-	t.payloadUnion, err = sdpassistor.NewPayloadUnion(lsdp)
-	if err != nil {
-		err = errors.Wrap(err, "failed to create metadata")
-	}
-
-	lsdp = *localSdp
+	t.localSdpSetted = true
 
 	return
 }
@@ -685,6 +726,34 @@ func (t *Transport) Finalize() {
 	t.eventemitter.EmitEvent(signalCloseTransport, nil)
 }
 
-func (t *Transport) PayloadUnion() *sdpassistor.PayloadUnion {
-	return t.payloadUnion
+func (t *Transport) LocalSdpType() webrtc.SDPType {
+	return t.localSdpType
+}
+
+func (t *Transport) LocalSdpSetted() bool {
+	return t.localSdpSetted
+}
+
+func (t *Transport) RemoteSdpSetted() bool {
+	return t.remoteSdpSetted
+}
+
+func (t *Transport) GatheringCompleteLocalSdp(ctx context.Context) (lsdp webrtc.SessionDescription, err error) {
+	if !t.localSdpSetted || !t.remoteSdpSetted {
+		err = errors.New("local or remote sdp not set")
+		return
+	}
+
+	// wait for gathering complete
+	gatherComplete := webrtc.GatheringCompletePromise(t.PeerConnection)
+	select {
+	case <-ctx.Done():
+		err = errors.Wrap(ctx.Err(), "context done")
+		return
+	case <-gatherComplete:
+	}
+
+	lsdp = *t.PeerConnection.LocalDescription()
+
+	return
 }

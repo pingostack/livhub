@@ -58,6 +58,7 @@ func (rtc *rtc) ModuleRun() {
 }
 
 func (rtc *rtc) StreamFactory() rtclib.StreamFactory {
+
 	rtc.lock.RLock()
 	factory := rtc.transportFactory
 	if rtc.transportFactory == nil {

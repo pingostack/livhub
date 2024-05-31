@@ -96,21 +96,34 @@ func (ss *SignalServer) publish(req Request, gc *gin.Context) error {
 
 	src, err := rtc.NewFrameSource(ss.ctx, interRtc.StreamFactory(), false, settings().KeyFrameIntervalSecond*time.Second, logger)
 	if err != nil {
+		logger.WithError(err).Error("failed to create frame source")
 		return errors.Wrap(err, "failed to create frame source")
 	}
 
-	answer, err := src.SetRemoteDescription(webrtc.SessionDescription{
+	err = src.SetRemoteDescription(webrtc.SessionDescription{
 		Type: webrtc.SDPTypeOffer,
 		SDP:  req.Data.SDP,
 	})
 	if err != nil {
+		logger.WithError(err).Error("failed to set remote description")
 		return errors.Wrap(err, "failed to set remote description")
 	}
 
-	// create session
+	_, err = src.CreateAnswer(nil)
+	if err != nil {
+		logger.WithError(err).Error("failed to create answer")
+		return errors.Wrap(err, "failed to create answer")
+	}
+
+	err = src.Start()
+	if err != nil {
+		logger.WithError(err).Error("failed to start frame source")
+		return errors.Wrap(err, "failed to start frame source")
+	}
 
 	logger.WithField("metadata", src.Metadata().String()).Debug("frame source metadata")
 
+	// create session
 	session := NewSession(ss.ctx, router.PeerParams{
 		RemoteAddr:     gc.Request.RemoteAddr,
 		LocalAddr:      gc.Request.Host,
@@ -126,12 +139,20 @@ func (ss *SignalServer) publish(req Request, gc *gin.Context) error {
 
 	err = session.BindFrameSource(src)
 	if err != nil {
+		logger.WithError(err).Error("failed to bind frame source")
 		return errors.Wrap(err, "failed to bind frame source")
 	}
 
 	err = session.Join()
 	if err != nil {
+		logger.WithError(err).Error("join failed")
 		return errors.Wrap(err, "join failed")
+	}
+
+	lsdp, err := src.GatheringCompleteLocalSdp(context.Background())
+	if err != nil {
+		logger.WithError(err).Error("failed to get completed sdp")
+		return errors.Wrap(err, "failed to get completed sdp")
 	}
 
 	resp := Response{
@@ -143,11 +164,11 @@ func (ss *SignalServer) publish(req Request, gc *gin.Context) error {
 		Data: struct {
 			SDP string `json:"sdp"`
 		}{
-			SDP: answer.SDP,
+			SDP: lsdp.SDP,
 		},
 	}
 
-	logger.WithField("answer", answer.SDP).Debug("resp answer")
+	logger.WithField("answer", lsdp.SDP).Debug("resp answer")
 	gc.JSON(http.StatusOK, resp)
 
 	return nil
@@ -185,13 +206,19 @@ func (ss *SignalServer) play(req Request, gc *gin.Context) error {
 	}, logger)
 
 	dest, err := rtc.NewFrameDestination(ss.ctx, interRtc.StreamFactory(),
-		false, webrtc.SessionDescription{
-			Type: webrtc.SDPTypeOffer,
-			SDP:  req.Data.SDP,
-		}, logger)
+		false, logger)
 	if err != nil {
 		logger.WithError(err).Error("failed to create frame destination")
 		return errors.Wrap(err, "failed create frame destination")
+	}
+
+	err = dest.SetRemoteDescription(webrtc.SessionDescription{
+		Type: webrtc.SDPTypeOffer,
+		SDP:  req.Data.SDP,
+	})
+	if err != nil {
+		logger.WithError(err).Error("failed to set remote description")
+		return errors.Wrap(err, "failed to set remote description")
 	}
 
 	err = session.BindFrameDestination(dest)
@@ -224,13 +251,22 @@ func (ss *SignalServer) play(req Request, gc *gin.Context) error {
 		}
 	}
 
-	answer, err := dest.SetRemoteDescription(webrtc.SessionDescription{
-		Type: webrtc.SDPTypeOffer,
-		SDP:  req.Data.SDP,
-	})
+	_, err = dest.CreateAnswer(nil)
 	if err != nil {
-		logger.WithError(err).Error("failed to set remote description")
-		return errors.Wrap(err, "failed to set remote description")
+		logger.WithError(err).Error("failed to create answer")
+		return errors.Wrap(err, "failed to create answer")
+	}
+
+	lsdp, err := dest.GatheringCompleteLocalSdp(context.Background())
+	if err != nil {
+		logger.WithError(err).Error("failed to get completed sdp")
+		return errors.Wrap(err, "failed to get completed sdp")
+	}
+
+	err = dest.Start()
+	if err != nil {
+		logger.WithError(err).Error("failed to start frame destination")
+		return errors.Wrap(err, "failed to start frame destination")
 	}
 
 	resp := Response{
@@ -242,11 +278,11 @@ func (ss *SignalServer) play(req Request, gc *gin.Context) error {
 		Data: struct {
 			SDP string `json:"sdp"`
 		}{
-			SDP: answer.SDP,
+			SDP: lsdp.SDP,
 		},
 	}
 
-	logger.WithField("answer", answer.SDP).Debug("resp answer")
+	logger.WithField("answer", lsdp.SDP).Debug("resp answer")
 	gc.JSON(http.StatusOK, resp)
 
 	return nil

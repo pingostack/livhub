@@ -13,6 +13,7 @@ import (
 	"github.com/pingostack/neon/pkg/logger"
 	"github.com/pion/ice/v3"
 	"github.com/pion/webrtc/v4"
+	"github.com/sirupsen/logrus"
 )
 
 type WebRTCConfig struct {
@@ -261,6 +262,10 @@ done:
 			}
 
 		case <-timeout.C:
+			logrus.WithFields(logrus.Fields{
+				"stun_servers": stunServers,
+				"timeout":      5 * time.Second,
+			}).Warn("failed to get external ip for all local ips")
 			break done
 		}
 	}

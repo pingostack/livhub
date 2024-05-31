@@ -18,9 +18,9 @@ import (
 
 type FrameDestination struct {
 	deliver.FrameDestination
+	*rtclib.LocalStream
 	ctx                     context.Context
 	cancel                  context.CancelFunc
-	localStream             *rtclib.LocalStream
 	logger                  *logrus.Entry
 	audioTrack              *rtclib.TrackLocl
 	videoTrack              *rtclib.TrackLocl
@@ -28,7 +28,7 @@ type FrameDestination struct {
 	chSourceCompletePromise chan error
 }
 
-func NewFrameDestination(ctx context.Context, streamFactory rtclib.StreamFactory, preferTCP bool, sd webrtc.SessionDescription, logger *logrus.Entry) (fd *FrameDestination, err error) {
+func NewFrameDestination(ctx context.Context, streamFactory rtclib.StreamFactory, preferTCP bool, logger *logrus.Entry) (fd *FrameDestination, err error) {
 	if logger == nil {
 		logger = logrus.WithField("obj", "frame-destination")
 	} else {
@@ -42,8 +42,8 @@ func NewFrameDestination(ctx context.Context, streamFactory rtclib.StreamFactory
 		}
 
 		if err != nil {
-			if fd != nil && fd.localStream != nil {
-				fd.localStream.Close()
+			if fd != nil && fd.LocalStream != nil {
+				fd.LocalStream.Close()
 			}
 		}
 	}()
@@ -55,7 +55,7 @@ func NewFrameDestination(ctx context.Context, streamFactory rtclib.StreamFactory
 
 	fd.ctx, fd.cancel = context.WithCancel(ctx)
 
-	fd.localStream, err = streamFactory.NewLocalStream(rtclib.LocalStreamParams{
+	fd.LocalStream, err = streamFactory.NewLocalStream(rtclib.LocalStreamParams{
 		Ctx:       fd.ctx,
 		Logger:    fd.logger,
 		PreferTCP: preferTCP,
@@ -66,44 +66,52 @@ func NewFrameDestination(ctx context.Context, streamFactory rtclib.StreamFactory
 		return nil, err
 	}
 
-	payloadUnion, err := sdpassistor.NewPayloadUnion(sd)
-	if err != nil {
-		logger.WithError(err).Error("failed to create payload union")
-		return nil, errors.Wrap(err, "failed to create payload union")
-	}
-
-	fd.FrameDestination = deliver.NewFrameDestinationImpl(fd.ctx, convFormatSettings(payloadUnion))
-
 	return fd, nil
 }
 
-func (fd *FrameDestination) CreateOffer(options *webrtc.OfferOptions) (sd webrtc.SessionDescription, err error) {
-	sd, err = fd.localStream.CreateOffer(options)
-	if err != nil {
-		return
-	}
-
-	if err = fd.localStream.SetLocalDescription(sd); err != nil {
-		fd.logger.WithError(err).Error("failed to set local description")
-		return
-	}
-
-	return sd, nil
-}
-
-func (fd *FrameDestination) SetRemoteDescription(remoteSdp webrtc.SessionDescription) (localSdp webrtc.SessionDescription, err error) {
-	localSdp, err = fd.localStream.SetRemoteDescription(remoteSdp)
+func (fd *FrameDestination) SetRemoteDescription(remoteSdp webrtc.SessionDescription) (err error) {
+	err = fd.LocalStream.SetRemoteDescription(remoteSdp)
 	if err != nil {
 		fd.logger.WithError(err).Error("failed to set remote description")
-		return webrtc.SessionDescription{}, err
+		return errors.Wrap(err, "failed to set remote description")
 	}
 
-	return localSdp, nil
+	if fd.LocalStream.LocalSdpType() == webrtc.SDPTypeAnswer {
+		var payloadUnion *sdpassistor.PayloadUnion
+		payloadUnion, err = sdpassistor.NewPayloadUnion(remoteSdp)
+		if err != nil {
+			fd.logger.WithError(err).Error("failed to create payload union")
+			return errors.Wrap(err, "failed to create payload union")
+		}
+
+		fd.FrameDestination = deliver.NewFrameDestinationImpl(fd.ctx, convFormatSettings(payloadUnion))
+	}
+
+	return nil
 }
 
-func (fd *FrameDestination) addAudioTrack(am *deliver.AudioMetadata) error {
-	var err error
-	fd.audioTrack, err = fd.localStream.AddTrack(am.CodecType, am.SampleRate, fd.logger)
+func (fd *FrameDestination) CreateOffer(options *webrtc.OfferOptions) (webrtc.SessionDescription, error) {
+	return fd.LocalStream.CreateOffer(options)
+}
+
+func (fd *FrameDestination) CreateAnswer(options *webrtc.AnswerOptions) (webrtc.SessionDescription, error) {
+	return fd.LocalStream.CreateAnswer(options)
+}
+
+func (fd *FrameDestination) Start() error {
+	if !fd.LocalStream.RemoteSdpSetted() || !fd.LocalStream.LocalSdpSetted() {
+		return errors.New("remote sdp not setted or local sdp already setted")
+	}
+
+	return nil
+}
+
+func (fd *FrameDestination) AddAudioTrack(am *deliver.AudioMetadata) (err error) {
+	if am == nil {
+		return nil
+	}
+
+	fd.audioTrack, err = fd.LocalStream.AddTrack(am.CodecType, am.SampleRate, fd.logger)
 	if err != nil {
 		return err
 	}
@@ -113,9 +121,12 @@ func (fd *FrameDestination) addAudioTrack(am *deliver.AudioMetadata) error {
 	return nil
 }
 
-func (fd *FrameDestination) addVideoTrack(vm *deliver.VideoMetadata) error {
-	var err error
-	fd.videoTrack, err = fd.localStream.AddTrack(vm.CodecType, vm.ClockRate, fd.logger)
+func (fd *FrameDestination) AddVideoTrack(vm *deliver.VideoMetadata) (err error) {
+	if vm == nil {
+		return nil
+	}
+
+	fd.videoTrack, err = fd.LocalStream.AddTrack(vm.CodecType, vm.ClockRate, fd.logger)
 	if err != nil {
 		return err
 	}
@@ -135,11 +146,11 @@ func (fd *FrameDestination) OnSource(src deliver.FrameSource) (err error) {
 		fd.chSourceCompletePromise <- err
 	}()
 
-	if err = fd.addAudioTrack(src.Metadata().Audio); err != nil {
+	if err = fd.AddAudioTrack(src.Metadata().Audio); err != nil {
 		return err
 	}
 
-	if err := fd.addVideoTrack(src.Metadata().Video); err != nil {
+	if err := fd.AddVideoTrack(src.Metadata().Video); err != nil {
 		return err
 	}
 
@@ -243,7 +254,7 @@ func (fd *FrameDestination) loopReadRTCP(track *rtclib.TrackLocl) {
 func (fd *FrameDestination) close() {
 	fd.onceClose.Do(func() {
 		fd.cancel()
-		fd.localStream.Close()
+		fd.LocalStream.Close()
 		fd.FrameDestination.Close()
 		fd.logger.Info("FrameDestination closed")
 	})
