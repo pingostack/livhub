@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/let-light/gomodule"
+	pms_feature "github.com/pingostack/neon/features/pms"
 	"github.com/pingostack/neon/internal/httpserv"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -41,7 +42,7 @@ func init() {
 	}
 }
 
-func PMSModule() *pms {
+func PMSModule() gomodule.IModule {
 	return pmsModule
 }
 
@@ -82,6 +83,10 @@ func (pms *pms) ModuleRun() {
 
 	<-pms.ctx.Done()
 	pms.close()
+}
+
+func (pms *pms) Type() interface{} {
+	return pms_feature.Type()
 }
 
 func (pms *pms) close() {

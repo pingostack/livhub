@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/let-light/gomodule"
+	feature_rtc "github.com/pingostack/neon/features/rtc"
 	"github.com/pingostack/neon/pkg/rtclib"
 	rtc_conf "github.com/pingostack/neon/pkg/rtclib/config"
 	"github.com/sirupsen/logrus"
@@ -55,6 +56,10 @@ func (rtc *rtc) ConfigChanged() {
 }
 
 func (rtc *rtc) ModuleRun() {
+}
+
+func (rtc *rtc) Type() interface{} {
+	return feature_rtc.Type()
 }
 
 func (rtc *rtc) StreamFactory() rtclib.StreamFactory {

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/let-light/gomodule"
+	feature_whip "github.com/pingostack/neon/features/whip"
 	"github.com/pingostack/neon/internal/httpserv"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -64,6 +65,10 @@ func (whip *whip) ModuleRun() {
 
 	<-whip.ctx.Done()
 	whip.close()
+}
+
+func (whip *whip) Type() interface{} {
+	return feature_whip.Type()
 }
 
 func (whip *whip) close() {

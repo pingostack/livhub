@@ -9,11 +9,10 @@ require (
 )
 
 require (
-	github.com/bluenviron/gortsplib/v4 v4.6.2
 	github.com/gin-contrib/cors v1.5.0
 	github.com/gin-gonic/gin v1.9.1
 	github.com/gogf/gf v1.16.9
-	github.com/let-light/gomodule v0.4.8
+	github.com/let-light/gomodule v0.5.0
 	github.com/livekit/mediatransportutil v0.0.0-20231130090133-bd1456add80a
 	github.com/livekit/protocol v1.9.3
 	github.com/panjf2000/gnet v1.6.6
@@ -32,7 +31,6 @@ require (
 )
 
 require (
-	github.com/bluenviron/mediacommon v1.5.1 // indirect
 	github.com/bytedance/sonic v1.10.1 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20230717121745-296ad89f973d // indirect
 	github.com/chenzhuoyu/iasm v0.9.0 // indirect

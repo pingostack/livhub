@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/let-light/gomodule"
+	feature_core "github.com/pingostack/neon/features/core"
 	"github.com/pingostack/neon/internal/core/router"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -57,4 +58,8 @@ func (core *core) ConfigChanged() {
 
 func (core *core) ModuleRun() {
 	defaultServ = NewServ(core.ctx, core.settings.Namespaces)
+}
+
+func (core *core) Type() interface{} {
+	return feature_core.Type()
 }
