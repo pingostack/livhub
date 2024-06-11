@@ -1,4 +1,4 @@
-package feature_core
+package feature_event
 
 import "github.com/let-light/gomodule"
 

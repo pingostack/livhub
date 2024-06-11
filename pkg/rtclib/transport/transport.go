@@ -396,7 +396,7 @@ func (t *Transport) SetPreferTCP(preferTCP bool) {
 	t.preferTCP.Store(preferTCP)
 }
 
-func (t *Transport) handleLocalICECandidate(data interface{}) {
+func (t *Transport) handleLocalICECandidate(data interface{}) (err error) {
 	candidate := data.(*webrtc.ICECandidate)
 	if candidate == nil {
 		t.logger.Errorf("Local ICE candidate is nil")
@@ -420,6 +420,8 @@ func (t *Transport) handleLocalICECandidate(data interface{}) {
 	if t.onICECandidate != nil {
 		t.onICECandidate(candidate.ToJSON())
 	}
+
+	return
 }
 
 func (t *Transport) clearLocalDescriptionSent() {
@@ -433,7 +435,7 @@ func (t *Transport) clearLocalDescriptionSent() {
 	t.filteredRemoteCandidates = nil
 }
 
-func (t *Transport) handleRemoteICECandidate(data interface{}) {
+func (t *Transport) handleRemoteICECandidate(data interface{}) (err error) {
 	c := data.(*webrtc.ICECandidateInit)
 
 	filtered := false
@@ -455,11 +457,14 @@ func (t *Transport) handleRemoteICECandidate(data interface{}) {
 		return
 	}
 
-	if err := t.PeerConnection.AddICECandidate(*c); err != nil {
+	if err = t.PeerConnection.AddICECandidate(*c); err != nil {
 		// TODO: handle error
 		return
 	}
 
+	t.logger.Debugf("Remote ICE candidate: %s", c.Candidate)
+
+	return
 }
 
 func (t *Transport) localDescriptionSent() error {
@@ -480,9 +485,9 @@ func (t *Transport) localDescriptionSent() error {
 	return nil
 }
 
-func (t *Transport) handleICEGatheringComplete(data interface{}) {
+func (t *Transport) handleICEGatheringComplete(data interface{}) (err error) {
 	t.logger.Debugf("ICE gathering complete")
-
+	return
 }
 
 func (t *Transport) UpdateICECredential(sdp *webrtc.SessionDescription) (bool, error) {
@@ -545,12 +550,14 @@ func (t *Transport) EnableRemoteCandidates() error {
 	return nil
 }
 
-func (t *Transport) handleCloseTransport(data interface{}) {
+func (t *Transport) handleCloseTransport(data interface{}) (err error) {
 	t.logger.Infof("Closing transport")
 	if t.PeerConnection != nil {
 		t.PeerConnection.Close()
 	}
 	t.cancel()
+
+	return
 }
 
 func (t *Transport) OnICECandidate(f func(candidate webrtc.ICECandidateInit)) {

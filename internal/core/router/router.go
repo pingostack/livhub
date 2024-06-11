@@ -12,7 +12,7 @@ import (
 
 type Router interface {
 	ID() string
-	AddSession(session Session) error
+	AddSession(s Session) error
 	Namespace() *Namespace
 	Context() context.Context
 	Closed() bool
@@ -54,7 +54,7 @@ func (r *RouterImpl) ID() string {
 	return r.id
 }
 
-func (r *RouterImpl) addProducer(session Session) error {
+func (r *RouterImpl) addProducer(s Session) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -72,19 +72,19 @@ func (r *RouterImpl) addProducer(session Session) error {
 		r.producer.Finalize(ErrProducerRepeated)
 	}
 
-	r.producer = session
+	r.producer = s
 
-	if err := r.stream.AddFrameSource(session.FrameSource()); err != nil {
+	if err := r.stream.AddFrameSource(s.FrameSource()); err != nil {
 		r.logger.WithError(err).Error("failed to add frame source")
 		return errors.Wrap(err, "failed to add frame source")
 	}
 
-	go r.waitSessionDone(session)
+	go r.waitSessionDone(s)
 
 	return nil
 }
 
-func (r *RouterImpl) addSubscriber(session Session) error {
+func (r *RouterImpl) addSubscriber(s Session) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -92,26 +92,26 @@ func (r *RouterImpl) addSubscriber(session Session) error {
 		return ErrRouterClosed
 	}
 
-	if _, ok := r.subscribers[session.ID()]; ok {
+	if _, ok := r.subscribers[s.ID()]; ok {
 		return ErrSessionAlreadyExists
 	}
 
-	r.subscribers[session.ID()] = session
+	r.subscribers[s.ID()] = s
 
-	if err := r.stream.AddFrameDestination(session.FrameDestination()); err != nil {
+	if err := r.stream.AddFrameDestination(s.FrameDestination()); err != nil {
 		return errors.Wrap(err, "failed to add frame destination")
 	}
 
-	go r.waitSessionDone(session)
+	go r.waitSessionDone(s)
 
 	return nil
 }
 
-func (r *RouterImpl) AddSession(session Session) error {
-	if session.PeerParams().Producer {
-		return r.addProducer(session)
+func (r *RouterImpl) AddSession(s Session) error {
+	if s.PeerParams().Producer {
+		return r.addProducer(s)
 	} else {
-		return r.addSubscriber(session)
+		return r.addSubscriber(s)
 	}
 }
 

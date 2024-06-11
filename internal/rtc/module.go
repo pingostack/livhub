@@ -7,22 +7,17 @@ import (
 	"github.com/let-light/gomodule"
 	feature_rtc "github.com/pingostack/neon/features/rtc"
 	"github.com/pingostack/neon/pkg/rtclib"
-	rtc_conf "github.com/pingostack/neon/pkg/rtclib/config"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
 var rtcModule *rtc
 
-type rtcSettings struct {
-	DefaultSettings rtc_conf.Settings `json:"default" mapstructure:"default" yaml:"default"`
-}
-
 type rtc struct {
 	gomodule.DefaultModule
 	ctx              context.Context
-	preSettings      rtcSettings
-	settings         *rtcSettings
+	preSettings      feature_rtc.Settings
+	settings         *feature_rtc.Settings
 	logger           *logrus.Entry
 	lock             sync.RWMutex
 	transportFactory rtclib.StreamFactory
@@ -62,8 +57,11 @@ func (rtc *rtc) Type() interface{} {
 	return feature_rtc.Type()
 }
 
-func (rtc *rtc) StreamFactory() rtclib.StreamFactory {
+func (rtc *rtc) GetSettings() feature_rtc.Settings {
+	return *rtc.settings
+}
 
+func (rtc *rtc) StreamFactory() rtclib.StreamFactory {
 	rtc.lock.RLock()
 	factory := rtc.transportFactory
 	if rtc.transportFactory == nil {

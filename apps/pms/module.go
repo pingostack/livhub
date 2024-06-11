@@ -75,7 +75,7 @@ func (pms *pms) Settings() PMSSettings {
 }
 
 func (pms *pms) ModuleRun() {
-	pms.serv = NewServer(pms.ctx, pms.logger)
+	pms.serv = NewSignalServer(pms.ctx, pms.logger)
 	if err := pms.serv.Start(); err != nil {
 		pms.logger.Errorf("pms start error: %v", err)
 		panic(errors.Wrap(err, "pms start error"))

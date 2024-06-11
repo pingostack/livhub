@@ -80,18 +80,18 @@ func (s *serv) Join(ctx context.Context, session router.Session) error {
 	return nil
 }
 
-func (s *serv) Middleware(m ...middleware.Middleware) ServerOption {
-	return func(s *serv) {
-		for _, middleware := range m {
-			s.middleware.Use(middleware)
-		}
-	}
-}
+// func (s *serv) Middleware(m ...middleware.Middleware) ServerOption {
+// 	return func(s *serv) {
+// 		for _, middleware := range m {
+// 			s.middleware.Use(middleware)
+// 		}
+// 	}
+// }
 
-func (s *serv) Use(selector string, m ...middleware.Middleware) ServerOption {
-	return func(s *serv) {
-		for _, middleware := range m {
-			s.middleware.Add(selector, middleware)
-		}
-	}
-}
+// func (s *serv) Use(selector string, m ...middleware.Middleware) ServerOption {
+// 	return func(s *serv) {
+// 		for _, middleware := range m {
+// 			s.middleware.Add(selector, middleware)
+// 		}
+// 	}
+// }

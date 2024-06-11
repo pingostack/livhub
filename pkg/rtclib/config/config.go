@@ -1,10 +1,13 @@
 package config
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pion/webrtc/v3"
 )
 
 const (
@@ -117,6 +120,72 @@ func (pr *PortRange) ToSlice() []int {
 	}
 
 	return ret
+}
+
+type ICEServer struct {
+	URLs           []string `json:"urls" mapstructure:"urls" yaml:"urls,omitempty"`
+	Username       string   `json:"username,omitempty" mapstructure:"username,omitempty" yaml:"username,omitempty"`
+	Credential     string   `json:"credential,omitempty" mapstructure:"credential,omitempty" yaml:"credential,omitempty"`
+	CredentialType string   `json:"credentialType,omitempty" mapstructure:"credentialType,omitempty" yaml:"credentialType,omitempty"`
+}
+
+func (ice *ICEServer) ToWebRTCICEServer() (webrtc.ICEServer, error) {
+	if ice.CredentialType == "password" {
+		return webrtc.ICEServer{
+			URLs:           ice.URLs,
+			Username:       ice.Username,
+			Credential:     ice.Credential,
+			CredentialType: webrtc.ICECredentialTypePassword,
+		}, nil
+	} else if ice.CredentialType == "oauth" {
+		// mackey:(base64 encoded mac key) token:(base64 encoded token)
+		mackey := ""
+		token := ""
+
+		// Split the credential into mackey and token
+		credParts := strings.Split(ice.Credential, " ")
+		for _, part := range credParts {
+			if strings.HasPrefix(part, "mackey:") {
+				mackey = strings.TrimPrefix(part, "mackey:")
+			} else if strings.HasPrefix(part, "token:") {
+				token = strings.TrimPrefix(part, "token:")
+			}
+		}
+
+		return webrtc.ICEServer{
+			URLs:           ice.URLs,
+			Username:       ice.Username,
+			Credential:     webrtc.OAuthCredential{MACKey: mackey, AccessToken: token},
+			CredentialType: webrtc.ICECredentialTypeOauth,
+		}, nil
+	}
+
+	return webrtc.ICEServer{}, webrtc.ErrUnknownType
+}
+
+func (ice *ICEServer) ToWhipLinkHeader() ([]string, error) {
+	iceServer, err := ice.ToWebRTCICEServer()
+	if err != nil {
+		return nil, err
+	}
+
+	links := []string{}
+	for _, url := range iceServer.URLs {
+		link := fmt.Sprintf(`<%s>; rel=\"ice-server\"`, url)
+		if ice.Username != "" {
+			link += fmt.Sprintf("; username=\"%s\"", ice.Username)
+		}
+
+		if ice.Credential != "" {
+			link += fmt.Sprintf("; credential=\"%s\"", ice.Credential)
+		}
+
+		if ice.CredentialType != "" {
+			link += fmt.Sprintf("; credentialType=\"%s\"", ice.CredentialType)
+		}
+	}
+
+	return links, nil
 }
 
 type Settings struct {

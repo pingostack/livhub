@@ -24,7 +24,7 @@ type SignalServer struct {
 	logger *logrus.Entry
 }
 
-func NewServer(ctx context.Context, logger *logrus.Entry) *SignalServer {
+func NewSignalServer(ctx context.Context, logger *logrus.Entry) *SignalServer {
 	return &SignalServer{
 		SignalServer: httpserv.NewSignalServer(ctx, settings().HttpParams, logger),
 		ctx:          ctx,

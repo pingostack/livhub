@@ -36,6 +36,7 @@ type SignalServer struct {
 	params    HttpParams
 	httpServ  *Server
 	httpsServ *Server
+	router    *gin.Engine
 }
 
 func NewSignalServer(ctx context.Context, params HttpParams, logger *logrus.Entry) *SignalServer {
@@ -43,6 +44,7 @@ func NewSignalServer(ctx context.Context, params HttpParams, logger *logrus.Entr
 		l:      logger,
 		ctx:    ctx,
 		params: params,
+		router: gin.New(),
 	}
 }
 
@@ -78,12 +80,18 @@ func (ss *SignalServer) validate() error {
 	return nil
 }
 
+func (ss *SignalServer) DefaultRouter() *gin.Engine {
+	return ss.router
+}
+
 func (ss *SignalServer) Start(handles ...gin.HandlerFunc) error {
 	if err := ss.validate(); err != nil {
 		return err
 	}
 
-	router := gin.New()
+	//router := gin.Default()
+	router := ss.router
+
 	//router.SetTrustedProxies()
 	router.NoRoute(handles...)
 	corsConfig := cors.Config{
@@ -108,7 +116,7 @@ func (ss *SignalServer) Start(handles ...gin.HandlerFunc) error {
 			panic(err)
 		}
 
-		ss.l.Infof("http server listen on %s", ss.params.HttpAddr)
+		ss.l.WithField("port", ss.params.HttpAddr).Info("http server listen on")
 
 		ss.httpServ = NewServer(ss.ctx,
 			router,
@@ -124,7 +132,7 @@ func (ss *SignalServer) Start(handles ...gin.HandlerFunc) error {
 			panic(err)
 		}
 
-		ss.l.Infof("https server listen on %s", ss.params.HttpsAddr)
+		ss.l.WithField("port", ss.params.HttpsAddr).Info("https server listen on")
 
 		ss.httpsServ = NewServer(ss.ctx,
 			router,
@@ -150,4 +158,16 @@ func (ss *SignalServer) Close() error {
 
 func (ss *SignalServer) allowOriginHook(origin string) bool {
 	return true
+}
+
+func (ss *SignalServer) AllowMethods() []string {
+	return ss.params.AllowMethods
+}
+
+func (ss *SignalServer) AllowHeaders() []string {
+	return ss.params.AllowHeaders
+}
+
+func (ss *SignalServer) AllowOrigin() []string {
+	return ss.params.AllowOrigin
 }

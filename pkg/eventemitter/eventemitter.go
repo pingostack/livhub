@@ -6,13 +6,16 @@ import (
 	"sync"
 
 	"github.com/pingostack/neon/pkg/logger"
+	"github.com/pkg/errors"
 	"go.uber.org/atomic"
 )
 
 type eventID int
 
+type eventFunc func(data interface{}) error
+
 type EventEmitter interface {
-	AddEvent(eventID eventID, f func(data interface{}))
+	AddEvent(eventID eventID, f eventFunc)
 	EmitEvent(eventID eventID, data interface{}) error
 }
 
@@ -28,7 +31,7 @@ func (e Event) String() string {
 type EventEmitterImpl struct {
 	oneventLock sync.RWMutex
 	eventCh     chan Event
-	listeners   map[eventID][]func(data interface{})
+	listeners   map[eventID][]eventFunc
 	logger      logger.Logger
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -45,7 +48,7 @@ func GenEventID() eventID {
 func NewEventEmitter(ctx context.Context, size int, logger logger.Logger) EventEmitter {
 	m := &EventEmitterImpl{
 		eventCh:   make(chan Event, size),
-		listeners: make(map[eventID][]func(data interface{})),
+		listeners: make(map[eventID][]eventFunc),
 		logger:    logger,
 	}
 
@@ -77,6 +80,24 @@ func (m *EventEmitterImpl) EmitEvent(eventID eventID, data interface{}) error {
 			m.logger.Warnf("Event queue full, Event: %s", e)
 		}
 		return fmt.Errorf("Event queue full")
+	}
+
+	return nil
+}
+
+func (m *EventEmitterImpl) SyncEmitEvent(eventID eventID, data interface{}) error {
+	m.oneventLock.RLock()
+	listeners, found := m.listeners[eventID]
+	m.oneventLock.RUnlock()
+
+	if !found {
+		return nil
+	}
+
+	for _, f := range listeners {
+		if err := f(data); err != nil {
+			return errors.Wrap(err, "SyncEmitEvent")
+		}
 	}
 
 	return nil
@@ -115,13 +136,13 @@ func (m *EventEmitterImpl) run() {
 	}
 }
 
-func (m *EventEmitterImpl) AddEvent(eventID eventID, f func(data interface{})) {
+func (m *EventEmitterImpl) AddEvent(eventID eventID, f eventFunc) {
 	m.oneventLock.Lock()
 	defer m.oneventLock.Unlock()
 
 	listeners, found := m.listeners[eventID]
 	if !found {
-		listeners = make([]func(data interface{}), 0)
+		listeners = make([]eventFunc, 0)
 	}
 
 	listeners = append(listeners, f)
