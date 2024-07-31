@@ -2,6 +2,7 @@ package whip
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -36,6 +37,18 @@ func NewSignalServer(ctx context.Context, httpParams httpserv.HttpParams, logger
 	return ss
 }
 
+const (
+	PathVarType   = "type"
+	PathVarApp    = "app"
+	PathVarStream = "stream"
+	PathVarSecret = "secret"
+)
+
+var (
+	// path for post and options
+	PathPost = fmt.Sprintf("/:%s(%s|%s)/:%s/:%s", PathVarType, "whip", "whep", PathVarApp, PathVarStream)
+)
+
 func (ss *SignalServer) Start() error {
 	// 配置 CORS 中间件
 	corsConfig := cors.Config{
@@ -47,28 +60,24 @@ func (ss *SignalServer) Start() error {
 	}
 
 	ss.ss.DefaultRouter().Use(cors.New(corsConfig))
+	ss.ss.DefaultRouter().RedirectTrailingSlash = false
 
 	ss.ss.DefaultRouter().Use(func(gc *gin.Context) {
 		gc.Writer.Header().Set("Access-Control-Allow-Origin", strings.Join(ss.httpParams.AllowOrigin, " ,"))
 		gc.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 	})
 
-	ss.ss.DefaultRouter().POST("/whip/:app/:stream/", ss.handlePostWhip)
-	ss.ss.DefaultRouter().OPTIONS("/whip/:app/:stream/:method", ss.handleOptions)
-	ss.ss.DefaultRouter().PATCH("/whip/:app/:stream/:method/:secret", ss.handlePatchWhip)
-	ss.ss.DefaultRouter().DELETE("/whip/:app/:stream/:method/:secret", ss.handleDeleteWhip)
+	ss.ss.DefaultRouter().Any(PathPost, ss.handleRequest)
+	ss.ss.DefaultRouter().Any("/:type(whip|whep)/:app/:stream/:secret", ss.handleRequest)
 
-	ss.ss.DefaultRouter().POST("/whep/:app/:stream/", ss.handlePostWhep)
-	ss.ss.DefaultRouter().OPTIONS("/whep/:app/:stream/:method", ss.handleOptions)
-	ss.ss.DefaultRouter().PATCH("/whep/:app/:stream/:method/:secret", ss.handlePatchWhep)
-	ss.ss.DefaultRouter().DELETE("/whep/:app/:stream/:method/:secret", ss.handleDeleteWhep)
-
-	ss.ss.DefaultRouter().OPTIONS("", func(ctx *gin.Context) {
-		ctx.Writer.Header().Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST, PATCH, DELETE")
-		ctx.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, If-Match")
-		ctx.Writer.WriteHeader(http.StatusNoContent)
+	return ss.ss.Start(func(gc *gin.Context) {
+		if gc.Request.Method == http.MethodOptions && gc.Request.Header.Get("Access-Control-Request-Method") != "" {
+			gc.Writer.Header().Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST, PATCH, DELETE")
+			gc.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, If-Match")
+			gc.Writer.WriteHeader(http.StatusNoContent)
+			return
+		}
 	})
-	return ss.ss.Start()
 }
 
 func (ss *SignalServer) Close() error {
@@ -79,26 +88,39 @@ func (ss *SignalServer) handleOptions(gc *gin.Context) {
 	gc.Writer.Header().Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST, PATCH, DELETE")
 	gc.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, If-Match")
 	gc.Writer.Header().Set("Access-Control-Expose-Headers", "Link")
-	gc.Writer.Header().Set("Link", "")
+	gc.Writer.Header()["Link"] = []string{"<https://www.w3.org/TR/webrtc/>; rel=\"help\"", "<https://www.w3.org/TR/webrtc/>; rel=\"help\""}
 	gc.Writer.WriteHeader(http.StatusNoContent)
 }
 
-func (ss *SignalServer) handlePostWhip(gc *gin.Context) {
+func (ss *SignalServer) handleRequest(gc *gin.Context) {
+	secret := gc.Param("secret")
+	if secret == "" {
+		switch gc.Request.Method {
+		case http.MethodOptions:
+			ss.handleOptions(gc)
+		case http.MethodPost:
+			ss.handlePost(gc)
+		default:
+			gc.JSON(http.StatusMethodNotAllowed, gin.H{"error": "method not allowed"})
+		}
+	} else {
+		switch gc.Request.Method {
+		case http.MethodPatch:
+			ss.handlePatch(gc)
+		case http.MethodDelete:
+			ss.handleDelete(gc)
+		default:
+			gc.JSON(http.StatusMethodNotAllowed, gin.H{"error": "method not allowed"})
+		}
+	}
+}
+
+func (ss *SignalServer) handlePost(gc *gin.Context) {
 
 }
 
-func (ss *SignalServer) handlePostWhep(gc *gin.Context) {
-
+func (ss *SignalServer) handlePatch(gc *gin.Context) {
 }
 
-func (ss *SignalServer) handlePatchWhep(gc *gin.Context) {
-}
-
-func (ss *SignalServer) handleDeleteWhep(gc *gin.Context) {
-}
-
-func (ss *SignalServer) handlePatchWhip(gc *gin.Context) {
-}
-
-func (ss *SignalServer) handleDeleteWhip(gc *gin.Context) {
+func (ss *SignalServer) handleDelete(gc *gin.Context) {
 }
