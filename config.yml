@@ -48,7 +48,7 @@ webrtc: {
   #  icePortRange: "7300-7400",
     udpMuxPort: "8888-8888",
   #  tcpPort: 8888,
-    stunServers: ["stun.l.google.com:19302"],
+    iceServers: ["stun.l.google.com:19302"],
     useMdns: true,
     ice_config: {
       "minTcpICEConnectTimeout": 10,

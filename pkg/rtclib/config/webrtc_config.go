@@ -88,10 +88,16 @@ func NewWebRTCConfig(settings *Settings) (*WebRTCConfig, error) {
 		logger.Infof("nat1to1 ips: %v", nat1to1IPs)
 		se.SetNAT1To1IPs(nat1to1IPs, webrtc.ICECandidateTypeHost)
 	} else {
-		if len(settings.STUNServers) > 0 {
-			c.ICEServers = []webrtc.ICEServer{iceServerForStunServers(settings.STUNServers)}
+		if len(settings.ICEServers) > 0 {
+			for _, s := range settings.ICEServers {
+				webrtcIceServer, err := s.ToWebRTCICEServer()
+				if err != nil {
+					return nil, err
+				}
+				c.ICEServers = append(c.ICEServers, webrtcIceServer)
+			}
 		} else {
-			c.ICEServers = []webrtc.ICEServer{iceServerForStunServers(defaultStunServers)}
+			c.ICEServers = convDefaultWebrtcIceServer()
 		}
 	}
 
@@ -183,18 +189,34 @@ func validateNat1to1IPs(ips []string) []string {
 	return validIPs
 }
 
-func iceServerForStunServers(servers []string) webrtc.ICEServer {
-	iceServer := webrtc.ICEServer{}
-	for _, stunServer := range servers {
-		iceServer.URLs = append(iceServer.URLs, fmt.Sprintf("stun:%s", stunServer))
+func convDefaultWebrtcIceServer() []webrtc.ICEServer {
+	iceServers := make([]webrtc.ICEServer, 0, len(defaultStunServers))
+	for _, s := range defaultStunServers {
+		iceServers = append(iceServers, webrtc.ICEServer{
+			URLs:     []string{s},
+			Username: "",
+		})
 	}
-	return iceServer
+
+	return iceServers
+}
+
+func convDefaultIceServer() []ICEServer {
+	iceServers := make([]ICEServer, 0, len(defaultStunServers))
+	for _, s := range defaultStunServers {
+		iceServers = append(iceServers, ICEServer{
+			URLs:     []string{s},
+			Username: "",
+		})
+	}
+
+	return iceServers
 }
 
 func getNAT1to1IPsForConf(settings *Settings, ipFilter func(net.IP) bool) ([]string, []string, error) {
-	stunServers := settings.STUNServers
-	if len(stunServers) == 0 {
-		stunServers = defaultStunServers
+	iceServers := settings.ICEServers
+	if len(iceServers) == 0 {
+		iceServers = convDefaultIceServer()
 	}
 	localIPs, err := GetLocalIPAddresses(settings.EnableLoopbackCandidate, nil)
 	if err != nil {
@@ -229,7 +251,7 @@ func getNAT1to1IPsForConf(settings *Settings, ipFilter func(net.IP) bool) ([]str
 		go func(localIP string) {
 			defer wg.Done()
 			for _, port := range udpPorts {
-				addr, err := GetExternalIP(ctx, stunServers, &net.UDPAddr{IP: net.ParseIP(localIP), Port: port})
+				addr, err := GetExternalIP(ctx, iceServers, &net.UDPAddr{IP: net.ParseIP(localIP), Port: port})
 				if err != nil {
 					if strings.Contains(err.Error(), "address already in use") {
 						logger.Debug("failed to get external ip, address already in use", "local", localIP, "port", port)
@@ -263,7 +285,7 @@ done:
 
 		case <-timeout.C:
 			logrus.WithFields(logrus.Fields{
-				"stun_servers": stunServers,
+				"stun_servers": iceServers,
 				"timeout":      5 * time.Second,
 			}).Warn("failed to get external ip for all local ips")
 			break done

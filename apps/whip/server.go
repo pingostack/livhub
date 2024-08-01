@@ -84,11 +84,27 @@ func (ss *SignalServer) Close() error {
 	return ss.ss.Close()
 }
 
+func (ss *SignalServer) getLinkHeader() []string {
+	iceServers := ss.rtc.GetSettings().DefaultSettings.ICEServers
+	link := []string{}
+	for _, iceServer := range iceServers {
+		l, err := iceServer.ToWhipLinkHeader()
+		if err != nil {
+			ss.logger.Errorf("ToWhipLinkHeader error: %v", err)
+			continue
+		}
+
+		link = append(link, l...)
+	}
+
+	return link
+}
+
 func (ss *SignalServer) handleOptions(gc *gin.Context) {
 	gc.Writer.Header().Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST, PATCH, DELETE")
 	gc.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, If-Match")
 	gc.Writer.Header().Set("Access-Control-Expose-Headers", "Link")
-	gc.Writer.Header()["Link"] = []string{"<https://www.w3.org/TR/webrtc/>; rel=\"help\"", "<https://www.w3.org/TR/webrtc/>; rel=\"help\""}
+	gc.Writer.Header()["Link"] = ss.getLinkHeader()
 	gc.Writer.WriteHeader(http.StatusNoContent)
 }
 

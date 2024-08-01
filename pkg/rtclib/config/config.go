@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pion/webrtc/v3"
+	"github.com/pion/webrtc/v4"
 )
 
 const (
@@ -122,6 +122,11 @@ func (pr *PortRange) ToSlice() []int {
 	return ret
 }
 
+type OAuthCredential struct {
+	MACKey      string `json:"MACKey" mapstructure:"MACKey" yaml:"MACKey,omitempty"`
+	AccessToken string `json:"AccessToken" mapstructure:"AccessToken" yaml:"AccessToken,omitempty"`
+}
+
 type ICEServer struct {
 	URLs           []string `json:"urls" mapstructure:"urls" yaml:"urls,omitempty"`
 	Username       string   `json:"username,omitempty" mapstructure:"username,omitempty" yaml:"username,omitempty"`
@@ -130,14 +135,18 @@ type ICEServer struct {
 }
 
 func (ice *ICEServer) ToWebRTCICEServer() (webrtc.ICEServer, error) {
-	if ice.CredentialType == "password" {
+	if ice.CredentialType == "" {
+		ice.CredentialType = webrtc.ICECredentialTypePassword.String()
+	}
+
+	if ice.CredentialType == webrtc.ICECredentialTypePassword.String() {
 		return webrtc.ICEServer{
 			URLs:           ice.URLs,
 			Username:       ice.Username,
 			Credential:     ice.Credential,
 			CredentialType: webrtc.ICECredentialTypePassword,
 		}, nil
-	} else if ice.CredentialType == "oauth" {
+	} else if ice.CredentialType == webrtc.ICECredentialTypeOauth.String() {
 		// mackey:(base64 encoded mac key) token:(base64 encoded token)
 		mackey := ""
 		token := ""
@@ -169,20 +178,26 @@ func (ice *ICEServer) ToWhipLinkHeader() ([]string, error) {
 		return nil, err
 	}
 
+	if iceServer.CredentialType == webrtc.ICECredentialTypeOauth {
+		return nil, fmt.Errorf("OAuth credentials are not supported in WhipLinkHeader")
+	}
+
 	links := []string{}
 	for _, url := range iceServer.URLs {
-		link := fmt.Sprintf(`<%s>; rel=\"ice-server\"`, url)
+		link := fmt.Sprintf(`<%s>; rel="ice-server"`, url)
 		if ice.Username != "" {
-			link += fmt.Sprintf("; username=\"%s\"", ice.Username)
+			link += fmt.Sprintf(`; username="%s"`, ice.Username)
 		}
 
 		if ice.Credential != "" {
-			link += fmt.Sprintf("; credential=\"%s\"", ice.Credential)
+			link += fmt.Sprintf(`; credential="%s"`, ice.Credential)
 		}
 
 		if ice.CredentialType != "" {
-			link += fmt.Sprintf("; credentialType=\"%s\"", ice.CredentialType)
+			link += fmt.Sprintf(`; credentialType="%s";`, ice.CredentialType)
 		}
+
+		links = append(links, link)
 	}
 
 	return links, nil
@@ -195,7 +210,7 @@ type Settings struct {
 	ICEPortRange            PortRange        `json:"icePortRange,omitempty" yaml:"icePortRange,omitempty" mapstructure:"icePortRange,omitempty"`
 	UDPMuxPort              PortRange        `json:"udpMuxPort,omitempty" yaml:"udpMuxPort,omitempty" mapstructure:"udpMuxPort,omitempty"`
 	TCPPort                 int              `json:"tcpPort,omitempty" yaml:"tcpPort,omitempty" mapstructure:"tcpPort,omitempty"`
-	STUNServers             []string         `json:"stunServers,omitempty" yaml:"stunServers,omitempty" mapstructure:"stunServers,omitempty"`
+	ICEServers              []ICEServer      `json:"iceServers,omitempty" yaml:"iceServers,omitempty" mapstructure:"iceServers,omitempty"`
 	Interfaces              InterfacesConfig `json:"interfaces,omitempty" yaml:"interfaces,omitempty" mapstructure:"interfaces,omitempty"`
 	IPs                     IPsConfig        `json:"ips,omitempty" yaml:"ips,omitempty" mapstructure:"ips,omitempty"`
 	EnableLoopbackCandidate bool             `json:"enable_loopback_candidate,omitempty" yaml:"enable_loopback_candidate,omitempty" mapstructure:"enable_loopback_candidate,omitempty"`

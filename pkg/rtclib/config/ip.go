@@ -62,34 +62,43 @@ func GetLocalIPAddresses(includeLoopback bool, preferredInterfaces []string) ([]
 	return nil, fmt.Errorf("could not find local IP address")
 }
 
-func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr) (ip string, err error) {
-	logger.Infof("getting external IP, stunServers: %v, localAddr: %s", stunServers, localAddr.String())
-	if len(stunServers) == 0 {
+func GetExternalIP(ctx context.Context, iceServers []ICEServer, localAddr net.Addr) (ip string, err error) {
+	logger.Infof("getting external IP, iceServers: %v, localAddr: %s", iceServers, localAddr.String())
+	if len(iceServers) == 0 {
 		return "", errors.New("STUN servers are required but not defined")
 	}
 
-	for _, stunServer := range stunServers {
-		ip, err = getExternalIP(ctx, stunServer, localAddr)
+	for _, iceServer := range iceServers {
+		if len(iceServer.URLs) == 0 {
+			continue
+		}
+		ip, err = getExternalIP(ctx, iceServer, localAddr)
 		if err == nil {
 			return
 		}
-		logger.Warnf("failed to get external IP from %s: %v", stunServer, err)
+		logger.Warnf("failed to get external IP from %s: %v", iceServer, err)
 	}
 
 	return "", errors.Wrap(err, "could not resolve external IP")
 }
 
-func getExternalIP(ctx context.Context, stunServer string, localAddr net.Addr) (string, error) {
-	if stunServer == "" {
-		return "", errors.New("STUN servers are required but not defined")
-	}
+func getExternalIP(ctx context.Context, iceServer ICEServer, localAddr net.Addr) (string, error) {
+
 	dialer := &net.Dialer{
 		LocalAddr: localAddr,
 	}
-	conn, err := dialer.Dial("udp4", stunServer)
-	if err != nil {
-		return "", err
+	var conn net.Conn
+	var err error
+	for _, url := range iceServer.URLs {
+		conn, err = dialer.Dial("udp4", url)
+		if err != nil {
+			continue
+		}
 	}
+	if err != nil {
+		return "", errors.Wrap(err, "could not dial STUN server")
+	}
+
 	c, err := stun.NewClient(conn)
 	if err != nil {
 		return "", err
