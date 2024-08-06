@@ -142,11 +142,11 @@ func NewTransport(opts ...TransportOpt) (*Transport, error) {
 				}
 			}
 		case webrtc.PeerConnectionStateFailed:
-			t.logger.Warn("ICE connection failed",
-				"lc", t.allowedLocalCandidates,
-				"rc", t.allowedRemoteCandidates,
-				"lc (filtered)", t.filteredLocalCandidates,
-				"rc (filtered)", t.filteredRemoteCandidates)
+			t.logger.Warn("ICE connection failed ",
+				"lc ", t.allowedLocalCandidates,
+				"rc ", t.allowedRemoteCandidates,
+				"lc (filtered) ", t.filteredLocalCandidates,
+				"rc (filtered) ", t.filteredRemoteCandidates)
 			t.clearConnTimer()
 			t.handleConnectionFailed(false)
 		}

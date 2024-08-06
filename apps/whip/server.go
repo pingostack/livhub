@@ -2,15 +2,22 @@ package whip
 
 import (
 	"context"
-	"fmt"
+	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/gogf/gf/util/guid"
+	"github.com/google/uuid"
 	"github.com/let-light/gomodule"
 	feature_rtc "github.com/pingostack/neon/features/rtc"
+	"github.com/pingostack/neon/internal/core/router"
 	"github.com/pingostack/neon/internal/httpserv"
+	inter_rtc "github.com/pingostack/neon/internal/rtc"
+	"github.com/pingostack/neon/pkg/deliver/rtc"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -44,11 +51,6 @@ const (
 	PathVarSecret = "secret"
 )
 
-var (
-	// path for post and options
-	PathPost = fmt.Sprintf("/:%s(%s|%s)/:%s/:%s", PathVarType, "whip", "whep", PathVarApp, PathVarStream)
-)
-
 func (ss *SignalServer) Start() error {
 	// 配置 CORS 中间件
 	corsConfig := cors.Config{
@@ -67,8 +69,8 @@ func (ss *SignalServer) Start() error {
 		gc.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 	})
 
-	ss.ss.DefaultRouter().Any(PathPost, ss.handleRequest)
-	ss.ss.DefaultRouter().Any("/:type(whip|whep)/:app/:stream/:secret", ss.handleRequest)
+	ss.ss.DefaultRouter().Any("/:type/:app/:stream", ss.handleRequest)
+	ss.ss.DefaultRouter().Any("/:type/:app/:stream/:secret", ss.handleRequest)
 
 	return ss.ss.Start(func(gc *gin.Context) {
 		if gc.Request.Method == http.MethodOptions && gc.Request.Header.Get("Access-Control-Request-Method") != "" {
@@ -132,10 +134,122 @@ func (ss *SignalServer) handleRequest(gc *gin.Context) {
 }
 
 func (ss *SignalServer) handlePost(gc *gin.Context) {
+	typ := gc.Param(PathVarType)
+	app := gc.Param(PathVarApp)
+	stream := gc.Param(PathVarStream)
+	if typ == "" || app == "" || stream == "" {
+		ss.logger.Errorf("bad request: %s %s %s", typ, app, stream)
+		gc.JSON(http.StatusBadRequest, gin.H{"error": "bad request"})
+		return
+	}
 
+	if typ == "whip" {
+		ss.handlePostWhip(gc, app, stream)
+	} else {
+		ss.handlePostWhep(gc, app, stream)
+	}
+}
+
+func sessionLocation(publish bool, secret uuid.UUID) string {
+	ret := ""
+	if publish {
+		ret += "whip"
+	} else {
+		ret += "whep"
+	}
+	ret += "/" + secret.String()
+	return ret
+}
+
+func (ss *SignalServer) handlePostWhip(gc *gin.Context, app, stream string) error {
+
+	peerID := guid.S()
+
+	logger := ss.logger.WithFields(logrus.Fields{
+		"session": peerID,
+		"stream":  stream,
+	})
+
+	domain := gc.Request.Host
+	sp := strings.Split(domain, ":")
+	if len(sp) > 0 {
+		domain = sp[0]
+	}
+
+	s := rtc.NewServSession(ss.ctx, inter_rtc.StreamFactory(), router.PeerParams{
+		RemoteAddr: gc.Request.RemoteAddr,
+		LocalAddr:  gc.Request.Host,
+		PeerID:     peerID,
+		RouterID:   stream,
+		Domain:     domain,
+		URI:        gc.Request.URL.Path,
+		Producer:   true,
+	}, logger)
+
+	sdpOffer, err := io.ReadAll(gc.Request.Body)
+	if err != nil {
+		return errors.Wrap(err, "failed to read sdp offer")
+	}
+
+	lsdp, err := s.Publish(2*time.Second, string(sdpOffer))
+	if err != nil {
+		logger.WithError(err).Error("failed to publish")
+		return errors.Wrap(err, "failed to publish")
+	}
+
+	logger.WithField("answer", lsdp.SDP).Debug("resp answer")
+	gc.Writer.Header().Set("Content-Type", "application/sdp")
+	gc.Writer.Header().Set("Access-Control-Expose-Headers", "ETag, ID, Accept-Patch, Link, Location")
+	gc.Writer.Header().Set("ETag", "*")
+	gc.Writer.Header().Set("ID", peerID)
+	gc.Writer.Header().Set("Accept-Patch", "application/trickle-ice-sdpfrag")
+	gc.Writer.Header().Set("Location", sessionLocation(true, uuid.New()))
+	gc.Writer.Header()["Link"] = ss.getLinkHeader()
+
+	gc.String(http.StatusCreated, lsdp.SDP)
+
+	return nil
+}
+
+func (ss *SignalServer) handlePostWhep(gc *gin.Context, app, stream string) error {
+
+	peerID := guid.S()
+
+	logger := ss.logger.WithFields(logrus.Fields{
+		"session": peerID,
+		"stream":  stream,
+	})
+
+	s := rtc.NewServSession(ss.ctx, inter_rtc.StreamFactory(), router.PeerParams{
+		RemoteAddr: gc.Request.RemoteAddr,
+		LocalAddr:  gc.Request.Host,
+		PeerID:     peerID,
+		RouterID:   stream,
+		Domain:     gc.Request.Host,
+		URI:        gc.Request.URL.Path,
+		Producer:   true,
+	}, logger)
+
+	sdpOffer, err := io.ReadAll(gc.Request.Body)
+	if err != nil {
+		return errors.Wrap(err, "failed to read sdp offer")
+	}
+
+	lsdp, err := s.Subscribe(string(sdpOffer), 4*time.Second)
+	if err != nil {
+		logger.WithError(err).Error("failed to whep")
+		return errors.Wrap(err, "failed to whep")
+	}
+
+	logger.WithField("answer", lsdp.SDP).Debug("resp answer")
+
+	gc.String(http.StatusOK, lsdp.SDP)
+
+	return nil
 }
 
 func (ss *SignalServer) handlePatch(gc *gin.Context) {
+	ss.logger.Infof("handlePatch")
 }
 
 func (ss *SignalServer) handleDelete(gc *gin.Context) {
