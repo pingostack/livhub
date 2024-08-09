@@ -89,15 +89,20 @@ func (ss *SignalServer) publish(req Request, gc *gin.Context) error {
 	}
 	logger := ss.logger.WithFields(logrus.Fields{
 		"session": peerID,
-		"stream":  req.Stream,
+		"router":  req.Stream,
 	})
+	domain := gc.Request.Host
+	sp := strings.Split(domain, ":")
+	if len(sp) > 0 {
+		domain = sp[0]
+	}
 
 	s := rtc.NewServSession(ss.ctx, inter_rtc.StreamFactory(), router.PeerParams{
 		RemoteAddr: gc.Request.RemoteAddr,
 		LocalAddr:  gc.Request.Host,
 		PeerID:     peerID,
 		RouterID:   req.Stream,
-		Domain:     gc.Request.Host,
+		Domain:     domain,
 		URI:        gc.Request.URL.Path,
 		Producer:   true,
 	}, logger)
@@ -134,7 +139,7 @@ func (ss *SignalServer) play(req Request, gc *gin.Context) error {
 	}
 	logger := ss.logger.WithFields(logrus.Fields{
 		"session": peerID,
-		"stream":  req.Stream,
+		"router":  req.Stream,
 	})
 	domain := gc.Request.Host
 	sp := strings.Split(domain, ":")

@@ -29,16 +29,11 @@ func NewServSession(ctx context.Context, sf rtclib.StreamFactory, pm router.Peer
 		pm:  pm,
 		sf:  sf,
 		logger: logger.WithFields(logrus.Fields{
-			"obj": "serv-session",
+			"session-type": "serv-session",
 		}),
 	}
 
 	return s
-}
-
-func (s *ServSession) waitSessionDone() {
-	<-s.Context().Done()
-	s.Logger().Infof("session done")
 }
 
 func (s *ServSession) Publish(keyFrameInterval time.Duration, sdpOffer string) (*webrtc.SessionDescription, error) {
@@ -101,8 +96,6 @@ func (s *ServSession) Publish(keyFrameInterval time.Duration, sdpOffer string) (
 	}
 
 	s.src = src
-
-	go s.waitSessionDone()
 
 	return &lsdp, nil
 }
@@ -186,8 +179,6 @@ func (s *ServSession) Subscribe(sdpOffer string, timeout time.Duration) (*webrtc
 	}
 
 	s.dest = dest
-
-	go s.waitSessionDone()
 
 	return &lsdp, nil
 }

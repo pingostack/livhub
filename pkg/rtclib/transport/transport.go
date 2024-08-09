@@ -193,42 +193,7 @@ func WithContext(ctx context.Context) func(t *Transport) {
 
 func (t *Transport) defaultICC() {
 	icc := &config.ICEConfig{}
-	if icc.ICEDisconnectedTimeout == 0 {
-		icc.ICEDisconnectedTimeout = 10 * time.Second
-	} else {
-		icc.ICEDisconnectedTimeout *= time.Second
-	}
-
-	if icc.ICEFailedTimeout == 0 {
-		icc.ICEFailedTimeout = 20 * time.Second
-	} else {
-		icc.ICEFailedTimeout *= time.Second
-	}
-
-	if icc.ICEKeepaliveInterval == 0 {
-		icc.ICEKeepaliveInterval = 2 * time.Second
-	} else {
-		icc.ICEKeepaliveInterval *= time.Second
-	}
-
-	if icc.MinTcpICEConnectTimeout == 0 {
-		icc.MinTcpICEConnectTimeout = 5 * time.Second
-	} else {
-		icc.MinTcpICEConnectTimeout *= time.Second
-	}
-
-	if icc.MaxTcpICEConnectTimeout == 0 {
-		icc.MaxTcpICEConnectTimeout = 12 * time.Second
-	} else {
-		icc.MaxTcpICEConnectTimeout *= time.Second
-	}
-
-	if icc.ShortConnectionThreshold == 0 {
-		icc.ShortConnectionThreshold = 90 * time.Second
-	} else {
-		icc.ShortConnectionThreshold *= time.Second
-	}
-
+	icc.Validate()
 	t.icc = icc
 }
 
@@ -270,9 +235,9 @@ func (t *Transport) handleConnectionFailed(forceShortConn bool) {
 		if isShort {
 			pair, err := t.getSelectedPair()
 			if err != nil {
-				t.logger.Errorf("Failed to get selected pair: %v, duration %d", err, duration)
+				t.logger.Errorf("Failed to get selected pair: %v, duration %d", err, duration.Seconds())
 			} else {
-				t.logger.Infof("Short connection detected: %v, %v, duration %d", pair.Local, pair.Remote, duration)
+				t.logger.Infof("Short connection detected: pair %v, duration %d", pair, duration.Seconds())
 			}
 		}
 	} else {
@@ -591,6 +556,8 @@ func (t *Transport) validate() error {
 
 	if t.icc == nil {
 		t.defaultICC()
+	} else {
+		t.icc.Validate()
 	}
 
 	if t.webrtcConfig != nil {

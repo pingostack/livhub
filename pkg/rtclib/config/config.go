@@ -44,6 +44,44 @@ type ICEConfig struct {
 	ShortConnectionThreshold time.Duration `json:"shortConnectionThreshold" mapstructure:"shortConnectionThreshold" p:"shortConnectionThreshold"`
 }
 
+func (icc *ICEConfig) Validate() {
+	if icc.ICEDisconnectedTimeout == 0 {
+		icc.ICEDisconnectedTimeout = 10 * time.Second
+	} else {
+		icc.ICEDisconnectedTimeout *= time.Second
+	}
+
+	if icc.ICEFailedTimeout == 0 {
+		icc.ICEFailedTimeout = 20 * time.Second
+	} else {
+		icc.ICEFailedTimeout *= time.Second
+	}
+
+	if icc.ICEKeepaliveInterval == 0 {
+		icc.ICEKeepaliveInterval = 2 * time.Second
+	} else {
+		icc.ICEKeepaliveInterval *= time.Second
+	}
+
+	if icc.MinTcpICEConnectTimeout == 0 {
+		icc.MinTcpICEConnectTimeout = 5 * time.Second
+	} else {
+		icc.MinTcpICEConnectTimeout *= time.Second
+	}
+
+	if icc.MaxTcpICEConnectTimeout == 0 {
+		icc.MaxTcpICEConnectTimeout = 12 * time.Second
+	} else {
+		icc.MaxTcpICEConnectTimeout *= time.Second
+	}
+
+	if icc.ShortConnectionThreshold == 0 {
+		icc.ShortConnectionThreshold = 90 * time.Second
+	} else {
+		icc.ShortConnectionThreshold *= time.Second
+	}
+}
+
 type CodecConfig struct {
 	Mime     string `json:"mime,omitempty" yaml:"mime,omitempty" mapstructure:"mime,omitempty"`
 	FmtpLine string `json:"fmtp_line,omitempty" yaml:"fmtp_line,omitempty" mapstructure:"fmtp_line,omitempty"`

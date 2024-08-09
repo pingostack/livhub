@@ -2,6 +2,7 @@ package whip
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -10,7 +11,6 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/gogf/gf/util/guid"
-	"github.com/google/uuid"
 	"github.com/let-light/gomodule"
 	feature_rtc "github.com/pingostack/neon/features/rtc"
 	"github.com/pingostack/neon/internal/core/router"
@@ -124,9 +124,9 @@ func (ss *SignalServer) handleRequest(gc *gin.Context) {
 	} else {
 		switch gc.Request.Method {
 		case http.MethodPatch:
-			ss.handlePatch(gc)
+			ss.handlePatch(gc, secret)
 		case http.MethodDelete:
-			ss.handleDelete(gc)
+			ss.handleDelete(gc, secret)
 		default:
 			gc.JSON(http.StatusMethodNotAllowed, gin.H{"error": "method not allowed"})
 		}
@@ -143,31 +143,33 @@ func (ss *SignalServer) handlePost(gc *gin.Context) {
 		return
 	}
 
+	routerID := fmt.Sprint(app, "/", stream)
+
 	if typ == "whip" {
-		ss.handlePostWhip(gc, app, stream)
+		ss.handlePostWhip(gc, routerID)
 	} else {
-		ss.handlePostWhep(gc, app, stream)
+		ss.handlePostWhep(gc, routerID)
 	}
 }
 
-func sessionLocation(publish bool, secret uuid.UUID) string {
+func sessionLocation(publish bool, secret string) string {
 	ret := ""
 	if publish {
 		ret += "whip"
 	} else {
 		ret += "whep"
 	}
-	ret += "/" + secret.String()
+	ret += "/" + secret
 	return ret
 }
 
-func (ss *SignalServer) handlePostWhip(gc *gin.Context, app, stream string) error {
+func (ss *SignalServer) handlePostWhip(gc *gin.Context, routerID string) error {
 
 	peerID := guid.S()
 
 	logger := ss.logger.WithFields(logrus.Fields{
 		"session": peerID,
-		"stream":  stream,
+		"router":  routerID,
 	})
 
 	domain := gc.Request.Host
@@ -180,7 +182,7 @@ func (ss *SignalServer) handlePostWhip(gc *gin.Context, app, stream string) erro
 		RemoteAddr: gc.Request.RemoteAddr,
 		LocalAddr:  gc.Request.Host,
 		PeerID:     peerID,
-		RouterID:   stream,
+		RouterID:   routerID,
 		Domain:     domain,
 		URI:        gc.Request.URL.Path,
 		Producer:   true,
@@ -203,7 +205,7 @@ func (ss *SignalServer) handlePostWhip(gc *gin.Context, app, stream string) erro
 	gc.Writer.Header().Set("ETag", "*")
 	gc.Writer.Header().Set("ID", peerID)
 	gc.Writer.Header().Set("Accept-Patch", "application/trickle-ice-sdpfrag")
-	gc.Writer.Header().Set("Location", sessionLocation(true, uuid.New()))
+	gc.Writer.Header().Set("Location", sessionLocation(true, peerID))
 	gc.Writer.Header()["Link"] = ss.getLinkHeader()
 
 	gc.String(http.StatusCreated, lsdp.SDP)
@@ -211,20 +213,19 @@ func (ss *SignalServer) handlePostWhip(gc *gin.Context, app, stream string) erro
 	return nil
 }
 
-func (ss *SignalServer) handlePostWhep(gc *gin.Context, app, stream string) error {
-
+func (ss *SignalServer) handlePostWhep(gc *gin.Context, routerID string) error {
 	peerID := guid.S()
 
 	logger := ss.logger.WithFields(logrus.Fields{
 		"session": peerID,
-		"stream":  stream,
+		"router":  routerID,
 	})
 
 	s := rtc.NewServSession(ss.ctx, inter_rtc.StreamFactory(), router.PeerParams{
 		RemoteAddr: gc.Request.RemoteAddr,
 		LocalAddr:  gc.Request.Host,
 		PeerID:     peerID,
-		RouterID:   stream,
+		RouterID:   routerID,
 		Domain:     gc.Request.Host,
 		URI:        gc.Request.URL.Path,
 		Producer:   true,
@@ -248,9 +249,11 @@ func (ss *SignalServer) handlePostWhep(gc *gin.Context, app, stream string) erro
 	return nil
 }
 
-func (ss *SignalServer) handlePatch(gc *gin.Context) {
+func (ss *SignalServer) handlePatch(gc *gin.Context, secret string) {
 	ss.logger.Infof("handlePatch")
 }
 
-func (ss *SignalServer) handleDelete(gc *gin.Context) {
+func (ss *SignalServer) handleDelete(gc *gin.Context, secret string) {
+	ss.logger.Infof("handleDelete")
+
 }

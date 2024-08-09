@@ -69,6 +69,11 @@ func NewFrameSource(ctx context.Context, streamFactory rtclib.StreamFactory, pre
 		return nil, err
 	}
 
+	fs.RemoteStream.OnFailed(func(_ bool) {
+		fs.logger.Error("transport failed")
+		fs.close()
+	})
+
 	return fs, nil
 }
 

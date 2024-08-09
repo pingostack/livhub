@@ -37,7 +37,11 @@ func NewServ(ctx context.Context, params router.NSManagerParams) *serv {
 }
 
 func (s *serv) join(session router.Session) error {
-	ns, _ := s.NSManager.GetOrNewNamespace(s.ctx, session.PeerParams().Domain)
+	ns, _ := s.NSManager.GetOrNewNamespaceByDomain(s.ctx, session.PeerParams().Domain)
+	// if ns == nil {
+	// 	return router.ErrNamespaceNotFound
+	// }
+
 	r, _ := ns.GetOrNewRouter(session.PeerParams().RouterID)
 	err := r.AddSession(session)
 	if err == router.ErrRouterClosed {
