@@ -2,6 +2,7 @@ package whip
 
 import (
 	"context"
+	"time"
 
 	"github.com/let-light/gomodule"
 	feature_whip "github.com/pingostack/neon/features/whip"
@@ -18,7 +19,9 @@ type ISignalServer interface {
 }
 
 type WhipSettings struct {
-	httpserv.HttpParams `json:"http" mapstructure:"http"`
+	httpserv.HttpParams    `json:"http" mapstructure:"http"`
+	KeyFrameIntervalSecond time.Duration `json:"keyFrameIntervalSeconds" mapstructure:"keyFrameIntervalSeconds"`
+	JoinTimeoutSecond      time.Duration `json:"joinTimeoutSeconds" mapstructure:"joinTimeoutSeconds"`
 }
 
 type whip struct {
@@ -38,6 +41,10 @@ func init() {
 
 func WhipModule() *whip {
 	return whipModule
+}
+
+func settings() WhipSettings {
+	return *whipModule.settings
 }
 
 func (whip *whip) InitModule(ctx context.Context, _ *gomodule.Manager) (interface{}, error) {

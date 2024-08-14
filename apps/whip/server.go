@@ -193,7 +193,7 @@ func (ss *SignalServer) handlePostWhip(gc *gin.Context, routerID string) error {
 		return errors.Wrap(err, "failed to read sdp offer")
 	}
 
-	lsdp, err := s.Publish(2*time.Second, string(sdpOffer))
+	lsdp, err := s.Publish(settings().KeyFrameIntervalSecond*time.Second, string(sdpOffer))
 	if err != nil {
 		logger.WithError(err).Error("failed to publish")
 		return errors.Wrap(err, "failed to publish")
@@ -236,7 +236,7 @@ func (ss *SignalServer) handlePostWhep(gc *gin.Context, routerID string) error {
 		return errors.Wrap(err, "failed to read sdp offer")
 	}
 
-	lsdp, err := s.Subscribe(string(sdpOffer), 4*time.Second)
+	lsdp, err := s.Subscribe(string(sdpOffer), settings().JoinTimeoutSecond*time.Second)
 	if err != nil {
 		logger.WithError(err).Error("failed to whep")
 		return errors.Wrap(err, "failed to whep")
