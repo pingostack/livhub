@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingostack/neon/internal/core"
 	"github.com/pingostack/neon/internal/core/router"
 	"github.com/pingostack/neon/pkg/rtclib"
 	"github.com/pingostack/neon/pkg/rtclib/sdpassistor"
@@ -15,31 +14,31 @@ import (
 
 type ServSession struct {
 	router.Session
-	pm     router.PeerParams
-	ctx    context.Context
-	logger *logrus.Entry
-	dest   *FrameDestination
-	src    *FrameSource
-	sf     rtclib.StreamFactory
+	ctx        context.Context
+	logger     *logrus.Entry
+	dest       *FrameDestination
+	src        *FrameSource
+	sf         rtclib.StreamFactory
+	newSession func(hasAudio bool, hasVideo bool, hasData bool) router.Session
 }
 
-func NewServSession(ctx context.Context, sf rtclib.StreamFactory, pm router.PeerParams, logger *logrus.Entry) *ServSession {
-	s := &ServSession{
+func NewServSession(ctx context.Context, sf rtclib.StreamFactory, logger *logrus.Entry, f func(hasAudio bool, hasVideo bool, hasData bool) router.Session) *ServSession {
+	servSession := &ServSession{
 		ctx: ctx,
-		pm:  pm,
 		sf:  sf,
 		logger: logger.WithFields(logrus.Fields{
-			"session-type": "serv-session",
+			"session-type": "servSession-session",
 		}),
+		newSession: f,
 	}
 
-	return s
+	return servSession
 }
 
-func (s *ServSession) Publish(keyFrameInterval time.Duration, sdpOffer string) (*webrtc.SessionDescription, error) {
-	logger := s.logger
+func (servSession *ServSession) Publish(keyFrameInterval time.Duration, sdpOffer string) (*webrtc.SessionDescription, error) {
+	logger := servSession.logger
 
-	src, err := NewFrameSource(s.ctx, s.sf, false, keyFrameInterval, logger)
+	src, err := NewFrameSource(servSession.ctx, servSession.sf, false, keyFrameInterval, logger)
 	if err != nil {
 		logger.WithError(err).Error("failed to create frame source")
 		return nil, errors.Wrap(err, "failed to create frame source")
@@ -69,13 +68,8 @@ func (s *ServSession) Publish(keyFrameInterval time.Duration, sdpOffer string) (
 	logger.WithField("metadata", src.Metadata().String()).Debug("frame source metadata")
 
 	// create session
-	s.pm.Producer = true
-	s.pm.HasAudio = src.Metadata().HasAudio()
-	s.pm.HasVideo = src.Metadata().HasVideo()
-	s.pm.HasDataChannel = src.Metadata().HasData()
-
-	s.Session = core.NewSession(s.ctx, s.pm, logger)
-	session := s.Session
+	servSession.Session = servSession.newSession(src.Metadata().HasAudio(), src.Metadata().HasVideo(), src.Metadata().HasData())
+	session := servSession.Session
 
 	err = session.BindFrameSource(src)
 	if err != nil {
@@ -95,27 +89,22 @@ func (s *ServSession) Publish(keyFrameInterval time.Duration, sdpOffer string) (
 		return nil, errors.Wrap(err, "failed to get completed sdp")
 	}
 
-	s.src = src
+	servSession.src = src
 
 	return &lsdp, nil
 }
 
-func (s *ServSession) Subscribe(sdpOffer string, timeout time.Duration) (*webrtc.SessionDescription, error) {
-	logger := s.logger
+func (servSession *ServSession) Subscribe(sdpOffer string, timeout time.Duration) (*webrtc.SessionDescription, error) {
+	logger := servSession.logger
 	hasAudio, hasVideo, hasData, err := sdpassistor.GetPayloadStatus(sdpOffer, webrtc.SDPTypeOffer)
 	if err != nil {
 		logger.WithError(err).Error("failed to get payload status")
 		return nil, errors.Wrap(err, "failed to get payload status")
 	}
 
-	s.pm.Producer = false
-	s.pm.HasAudio = hasAudio
-	s.pm.HasVideo = hasVideo
-	s.pm.HasDataChannel = hasData
+	servSession.Session = servSession.newSession(hasAudio, hasVideo, hasData)
 
-	s.Session = core.NewSession(s.ctx, s.pm, logger)
-
-	dest, err := NewFrameDestination(s.ctx, s.sf,
+	dest, err := NewFrameDestination(servSession.ctx, servSession.sf,
 		false, logger)
 	if err != nil {
 		logger.WithError(err).Error("failed to create frame destination")
@@ -131,17 +120,17 @@ func (s *ServSession) Subscribe(sdpOffer string, timeout time.Duration) (*webrtc
 		return nil, errors.Wrap(err, "failed to set remote description")
 	}
 
-	err = s.BindFrameDestination(dest)
+	err = servSession.BindFrameDestination(dest)
 	if err != nil {
 		logger.WithError(err).Error("failed to bind frame destination")
 		return nil, errors.Wrap(err, "failed to bind frame source")
 	}
 
-	err = s.Join()
+	err = servSession.Join()
 	if err != nil {
 		if errors.Is(err, router.ErrPaddingDestination) {
 			select {
-			case <-s.ctx.Done():
+			case <-servSession.Context().Done():
 				return nil, errors.Wrap(err, "context done")
 			case err = <-dest.SourceCompletePromise():
 				if err != nil {
@@ -178,7 +167,7 @@ func (s *ServSession) Subscribe(sdpOffer string, timeout time.Duration) (*webrtc
 		return nil, errors.Wrap(err, "failed to start frame destination")
 	}
 
-	s.dest = dest
+	servSession.dest = dest
 
 	return &lsdp, nil
 }

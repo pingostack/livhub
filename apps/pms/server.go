@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gogf/gf/util/guid"
+	"github.com/pingostack/neon/internal/core"
 	"github.com/pingostack/neon/internal/core/router"
 	"github.com/pingostack/neon/internal/httpserv"
 	inter_rtc "github.com/pingostack/neon/internal/rtc"
@@ -97,15 +98,20 @@ func (ss *SignalServer) publish(req Request, gc *gin.Context) error {
 		domain = sp[0]
 	}
 
-	s := rtc.NewServSession(ss.ctx, inter_rtc.StreamFactory(), router.PeerParams{
-		RemoteAddr: gc.Request.RemoteAddr,
-		LocalAddr:  gc.Request.Host,
-		PeerID:     peerID,
-		RouterID:   req.Stream,
-		Domain:     domain,
-		URI:        gc.Request.URL.Path,
-		Producer:   true,
-	}, logger)
+	s := rtc.NewServSession(ss.ctx, inter_rtc.StreamFactory(), logger, func(hasAudio, hasVideo, hasData bool) router.Session {
+		return core.NewSession(ss.ctx, router.PeerParams{
+			RemoteAddr:     gc.Request.RemoteAddr,
+			LocalAddr:      gc.Request.Host,
+			PeerID:         peerID,
+			RouterID:       req.Stream,
+			Domain:         domain,
+			URI:            gc.Request.URL.Path,
+			Producer:       true,
+			HasAudio:       hasAudio,
+			HasVideo:       hasVideo,
+			HasDataChannel: hasData,
+		}, logger)
+	})
 
 	lsdp, err := s.Publish(settings().KeyFrameIntervalSecond*time.Second, req.Data.SDP)
 	if err != nil {
@@ -147,15 +153,20 @@ func (ss *SignalServer) play(req Request, gc *gin.Context) error {
 		domain = sp[0]
 	}
 
-	s := rtc.NewServSession(ss.ctx, inter_rtc.StreamFactory(), router.PeerParams{
-		RemoteAddr: gc.Request.RemoteAddr,
-		LocalAddr:  gc.Request.Host,
-		PeerID:     peerID,
-		RouterID:   req.Stream,
-		Domain:     domain,
-		URI:        gc.Request.URL.Path,
-		Producer:   true,
-	}, logger)
+	s := rtc.NewServSession(ss.ctx, inter_rtc.StreamFactory(), logger, func(hasAudio, hasVideo, hasData bool) router.Session {
+		return core.NewSession(ss.ctx, router.PeerParams{
+			RemoteAddr:     gc.Request.RemoteAddr,
+			LocalAddr:      gc.Request.Host,
+			PeerID:         peerID,
+			RouterID:       req.Stream,
+			Domain:         domain,
+			URI:            gc.Request.URL.Path,
+			Producer:       false,
+			HasAudio:       hasAudio,
+			HasVideo:       hasVideo,
+			HasDataChannel: hasData,
+		}, logger)
+	})
 
 	lsdp, err := s.Subscribe(req.Data.SDP, settings().JoinTimeoutSecond*time.Second)
 	if err != nil {

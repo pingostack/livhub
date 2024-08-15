@@ -13,6 +13,7 @@ import (
 	"github.com/gogf/gf/util/guid"
 	"github.com/let-light/gomodule"
 	feature_rtc "github.com/pingostack/neon/features/rtc"
+	"github.com/pingostack/neon/internal/core"
 	"github.com/pingostack/neon/internal/core/router"
 	"github.com/pingostack/neon/internal/httpserv"
 	inter_rtc "github.com/pingostack/neon/internal/rtc"
@@ -178,15 +179,20 @@ func (ss *SignalServer) handlePostWhip(gc *gin.Context, routerID string) error {
 		domain = sp[0]
 	}
 
-	s := rtc.NewServSession(ss.ctx, inter_rtc.StreamFactory(), router.PeerParams{
-		RemoteAddr: gc.Request.RemoteAddr,
-		LocalAddr:  gc.Request.Host,
-		PeerID:     peerID,
-		RouterID:   routerID,
-		Domain:     domain,
-		URI:        gc.Request.URL.Path,
-		Producer:   true,
-	}, logger)
+	s := rtc.NewServSession(ss.ctx, inter_rtc.StreamFactory(), logger, func(hasAudio, hasVideo, hasData bool) router.Session {
+		return core.NewSession(ss.ctx, router.PeerParams{
+			RemoteAddr:     gc.Request.RemoteAddr,
+			LocalAddr:      gc.Request.Host,
+			PeerID:         peerID,
+			RouterID:       routerID,
+			Domain:         domain,
+			URI:            gc.Request.URL.Path,
+			Producer:       true,
+			HasAudio:       hasAudio,
+			HasVideo:       hasVideo,
+			HasDataChannel: hasData,
+		}, logger)
+	})
 
 	sdpOffer, err := io.ReadAll(gc.Request.Body)
 	if err != nil {
@@ -220,21 +226,25 @@ func (ss *SignalServer) handlePostWhep(gc *gin.Context, routerID string) error {
 		"session": peerID,
 		"router":  routerID,
 	})
-
-	s := rtc.NewServSession(ss.ctx, inter_rtc.StreamFactory(), router.PeerParams{
-		RemoteAddr: gc.Request.RemoteAddr,
-		LocalAddr:  gc.Request.Host,
-		PeerID:     peerID,
-		RouterID:   routerID,
-		Domain:     gc.Request.Host,
-		URI:        gc.Request.URL.Path,
-		Producer:   true,
-	}, logger)
-
 	sdpOffer, err := io.ReadAll(gc.Request.Body)
 	if err != nil {
 		return errors.Wrap(err, "failed to read sdp offer")
 	}
+
+	s := rtc.NewServSession(ss.ctx, inter_rtc.StreamFactory(), logger, func(hasAudio, hasVideo, hasData bool) router.Session {
+		return core.NewSession(ss.ctx, router.PeerParams{
+			RemoteAddr:     gc.Request.RemoteAddr,
+			LocalAddr:      gc.Request.Host,
+			PeerID:         peerID,
+			RouterID:       routerID,
+			Domain:         gc.Request.Host,
+			URI:            gc.Request.URL.Path,
+			Producer:       false,
+			HasAudio:       hasAudio,
+			HasVideo:       hasVideo,
+			HasDataChannel: hasData,
+		}, logger)
+	})
 
 	lsdp, err := s.Subscribe(string(sdpOffer), settings().JoinTimeoutSecond*time.Second)
 	if err != nil {
