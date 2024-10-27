@@ -3,7 +3,7 @@ package core
 import (
 	"context"
 
-	"github.com/let-light/gomodule"
+	"github.com/im-pingo/gomodule"
 	feature_core "github.com/pingostack/neon/features/core"
 	"github.com/pingostack/neon/internal/core/router"
 	"github.com/sirupsen/logrus"

@@ -17,12 +17,13 @@ import (
 )
 
 type WebRTCConfig struct {
-	Configuration  webrtc.Configuration
-	SettingEngine  webrtc.SettingEngine
-	UDPMux         ice.UDPMux
-	TCPMuxListener *net.TCPListener
-	NAT1To1IPs     []string
-	UseMDNS        bool
+	Configuration   webrtc.Configuration
+	SettingEngine   webrtc.SettingEngine
+	UDPMux          ice.UDPMux
+	TCPMuxListener  *net.TCPListener
+	NAT1To1IPs      []string
+	NAT1To1UDPPorts []string
+	UseMDNS         bool
 }
 
 func NewWebRTCConfig(settings *Settings) (*WebRTCConfig, error) {
@@ -157,12 +158,13 @@ func NewWebRTCConfig(settings *Settings) (*WebRTCConfig, error) {
 	}
 
 	return &WebRTCConfig{
-		Configuration:  c,
-		SettingEngine:  se,
-		UDPMux:         udpMux,
-		TCPMuxListener: tcpListener,
-		NAT1To1IPs:     nat1to1IPs,
-		UseMDNS:        settings.UseMDNS,
+		Configuration:   c,
+		SettingEngine:   se,
+		UDPMux:          udpMux,
+		TCPMuxListener:  tcpListener,
+		NAT1To1IPs:      nat1to1IPs,
+		NAT1To1UDPPorts: settings.NAT1To1UDPPorts,
+		UseMDNS:         settings.UseMDNS,
 	}, nil
 }
 

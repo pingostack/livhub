@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/let-light/gomodule"
+	"github.com/im-pingo/gomodule"
 	pms_feature "github.com/pingostack/neon/features/pms"
 	"github.com/pingostack/neon/internal/httpserv"
 	"github.com/pkg/errors"

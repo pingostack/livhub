@@ -106,9 +106,16 @@ type InterfacesConfig struct {
 type PortRange string
 
 func (pr *PortRange) Valid() bool {
-	regex := regexp.MustCompile(`^\d{1,5}-\d{1,5}$`)
-	if !regex.MatchString(pr.String()) {
-		return false
+	if !strings.Contains(pr.String(), "-") {
+		regex := regexp.MustCompile(`^\d{1,5}$`)
+		if !regex.MatchString(pr.String()) {
+			return false
+		}
+	} else {
+		regex := regexp.MustCompile(`^\d{1,5}-\d{1,5}$`)
+		if !regex.MatchString(pr.String()) {
+			return false
+		}
 	}
 
 	startPort := pr.StartPort()
@@ -247,6 +254,7 @@ type Settings struct {
 	AutoGenerateExternalIP  bool             `json:"autoGenerateExternalIp,omitempty" yaml:"autoGenerateExternalIp,omitempty" mapstructure:"autoGenerateExternalIp,omitempty"`
 	ICEPortRange            PortRange        `json:"icePortRange,omitempty" yaml:"icePortRange,omitempty" mapstructure:"icePortRange,omitempty"`
 	UDPMuxPort              PortRange        `json:"udpMuxPort,omitempty" yaml:"udpMuxPort,omitempty" mapstructure:"udpMuxPort,omitempty"`
+	NAT1To1UDPPorts         []string         `json:"nat1To1UDPPorts,omitempty" yaml:"nat1To1UDPPorts,omitempty" mapstructure:"nat1To1UDPPorts,omitempty"`
 	TCPPort                 int              `json:"tcpPort,omitempty" yaml:"tcpPort,omitempty" mapstructure:"tcpPort,omitempty"`
 	ICEServers              []ICEServer      `json:"iceServers,omitempty" yaml:"iceServers,omitempty" mapstructure:"iceServers,omitempty"`
 	Interfaces              InterfacesConfig `json:"interfaces,omitempty" yaml:"interfaces,omitempty" mapstructure:"interfaces,omitempty"`

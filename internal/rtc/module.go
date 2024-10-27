@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/let-light/gomodule"
+	"github.com/im-pingo/gomodule"
 	feature_rtc "github.com/pingostack/neon/features/rtc"
 	"github.com/pingostack/neon/pkg/rtclib"
 	"github.com/sirupsen/logrus"

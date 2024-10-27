@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/let-light/gomodule"
+	"github.com/im-pingo/gomodule"
 	feature_whip "github.com/pingostack/neon/features/whip"
 	"github.com/pingostack/neon/internal/httpserv"
 	"github.com/sirupsen/logrus"

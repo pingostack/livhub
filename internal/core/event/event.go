@@ -3,7 +3,7 @@ package event
 import (
 	"context"
 
-	"github.com/let-light/gomodule"
+	"github.com/im-pingo/gomodule"
 	feature_event "github.com/pingostack/neon/features/core"
 	"github.com/pingostack/neon/pkg/eventemitter"
 	"github.com/sirupsen/logrus"

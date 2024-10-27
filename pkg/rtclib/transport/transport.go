@@ -729,5 +729,26 @@ func (t *Transport) GatheringCompleteLocalSdp(ctx context.Context) (lsdp webrtc.
 
 	lsdp = *t.PeerConnection.LocalDescription()
 
+	natPorts := make(map[string]string)
+	for _, port := range t.webrtcConfig.NAT1To1UDPPorts {
+		oldPort, newPort, found := strings.Cut(port, "/")
+		if !found {
+			continue
+		}
+
+		natPorts[oldPort] = newPort
+	}
+
+	lines := strings.Split(lsdp.SDP, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, "a=candidate:") {
+			for oldPort, newPort := range natPorts {
+				line = strings.ReplaceAll(line, oldPort, newPort)
+			}
+		}
+		lines[i] = line
+	}
+
+	lsdp.SDP = strings.Join(lines, "\n")
 	return
 }

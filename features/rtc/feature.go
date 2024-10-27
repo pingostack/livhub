@@ -1,7 +1,7 @@
 package feature_rtc
 
 import (
-	"github.com/let-light/gomodule"
+	"github.com/im-pingo/gomodule"
 
 	rtc_conf "github.com/pingostack/neon/pkg/rtclib/config"
 )

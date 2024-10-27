@@ -11,7 +11,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/gogf/gf/util/guid"
-	"github.com/let-light/gomodule"
+	"github.com/im-pingo/gomodule"
 	feature_rtc "github.com/pingostack/neon/features/rtc"
 	"github.com/pingostack/neon/internal/core"
 	"github.com/pingostack/neon/internal/core/router"

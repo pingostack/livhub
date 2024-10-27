@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	"github.com/let-light/gomodule"
+	"github.com/im-pingo/gomodule"
 	"github.com/pingostack/neon/apps/pms"
 	"github.com/pingostack/neon/apps/whip"
 	"github.com/pingostack/neon/internal/core"
