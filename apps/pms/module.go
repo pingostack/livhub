@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/let-light/gomodule"
-	pms_feature "github.com/pingostack/neon/features/pms"
-	"github.com/pingostack/neon/internal/httpserv"
+	pms_feature "github.com/pingostack/livhub/features/pms"
+	"github.com/pingostack/livhub/internal/httpserv"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"

@@ -13,7 +13,7 @@ type headerHandler struct {
 }
 
 func (h *headerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Server", "Neon")
+	w.Header().Set("Server", "Livhub")
 	for k, v := range h.headers {
 		w.Header().Set(k, v)
 	}

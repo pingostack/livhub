@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/let-light/gomodule"
-	feature_core "github.com/pingostack/neon/features/core"
-	"github.com/pingostack/neon/internal/core/router"
+	feature_core "github.com/pingostack/livhub/features/core"
+	"github.com/pingostack/livhub/internal/core/router"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )

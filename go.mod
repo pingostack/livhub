@@ -1,4 +1,4 @@
-module github.com/pingostack/neon
+module github.com/pingostack/livhub
 
 go 1.18
 

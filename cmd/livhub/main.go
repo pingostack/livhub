@@ -4,10 +4,10 @@ import (
 	"context"
 
 	"github.com/let-light/gomodule"
-	"github.com/pingostack/neon/apps/pms"
-	"github.com/pingostack/neon/apps/whip"
-	"github.com/pingostack/neon/internal/core"
-	"github.com/pingostack/neon/internal/rtc"
+	"github.com/pingostack/livhub/apps/pms"
+	"github.com/pingostack/livhub/apps/whip"
+	"github.com/pingostack/livhub/internal/core"
+	"github.com/pingostack/livhub/internal/rtc"
 	"github.com/sirupsen/logrus"
 )
 

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/pingostack/neon/pkg/logger"
+	"github.com/pingostack/livhub/pkg/logger"
 	"github.com/pkg/errors"
 	"go.uber.org/atomic"
 )

@@ -6,7 +6,7 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/pingostack/neon/pkg/logger"
+	"github.com/pingostack/livhub/pkg/logger"
 	"github.com/sirupsen/logrus"
 )
 

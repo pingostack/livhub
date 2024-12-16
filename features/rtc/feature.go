@@ -3,7 +3,7 @@ package feature_rtc
 import (
 	"github.com/let-light/gomodule"
 
-	rtc_conf "github.com/pingostack/neon/pkg/rtclib/config"
+	rtc_conf "github.com/pingostack/livhub/pkg/rtclib/config"
 )
 
 type Settings struct {

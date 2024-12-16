@@ -3,7 +3,7 @@ package sdpassistor
 import (
 	"encoding/json"
 
-	"github.com/pingostack/neon/pkg/rtclib/rtcerror"
+	"github.com/pingostack/livhub/pkg/rtclib/rtcerror"
 	"github.com/pion/sdp/v3"
 	"github.com/pion/webrtc/v4"
 	"github.com/pkg/errors"

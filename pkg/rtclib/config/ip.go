@@ -6,7 +6,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/pingostack/neon/pkg/logger"
+	"github.com/pingostack/livhub/pkg/logger"
 	"github.com/pion/stun"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/slices"

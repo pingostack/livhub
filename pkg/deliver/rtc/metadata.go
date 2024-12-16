@@ -3,8 +3,8 @@ package rtc
 import (
 	"strconv"
 
-	"github.com/pingostack/neon/pkg/deliver"
-	"github.com/pingostack/neon/pkg/rtclib/sdpassistor"
+	"github.com/pingostack/livhub/pkg/deliver"
+	"github.com/pingostack/livhub/pkg/rtclib/sdpassistor"
 	"github.com/pion/webrtc/v4"
 )
 

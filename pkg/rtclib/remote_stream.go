@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingostack/neon/pkg/logger"
-	"github.com/pingostack/neon/pkg/rtclib/transport"
+	"github.com/pingostack/livhub/pkg/logger"
+	"github.com/pingostack/livhub/pkg/rtclib/transport"
 	"github.com/pion/webrtc/v4"
 	"github.com/pkg/errors"
 )

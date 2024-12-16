@@ -3,7 +3,7 @@ package auth
 import (
 	"context"
 
-	"github.com/pingostack/neon/internal/core/middleware"
+	"github.com/pingostack/livhub/internal/core/middleware"
 )
 
 func Recovery() middleware.Middleware {

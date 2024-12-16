@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	sourcemanager "github.com/pingostack/neon/internal/core/router/source_manager"
-	"github.com/pingostack/neon/pkg/deliver"
+	sourcemanager "github.com/pingostack/livhub/internal/core/router/source_manager"
+	"github.com/pingostack/livhub/pkg/deliver"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )

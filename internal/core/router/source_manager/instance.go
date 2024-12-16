@@ -3,7 +3,7 @@ package sourcemanager
 import (
 	"sync"
 
-	"github.com/pingostack/neon/pkg/deliver"
+	"github.com/pingostack/livhub/pkg/deliver"
 )
 
 type Instance struct {

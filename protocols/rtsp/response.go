@@ -41,7 +41,7 @@ func NewResponse(cseq int, status Status) *Response {
 			"CSeq":           strconv.Itoa(cseq),
 			"Date":           time.Now().Format(time.RFC1123),
 			"Content-Length": strconv.Itoa(0),
-			"Server":         "Neon-RTSP",
+			"Server":         "Livhub-RTSP",
 		},
 	}
 

@@ -8,10 +8,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gogf/gf/util/guid"
-	"github.com/pingostack/neon/internal/core/router"
-	"github.com/pingostack/neon/internal/httpserv"
-	inter_rtc "github.com/pingostack/neon/internal/rtc"
-	"github.com/pingostack/neon/pkg/deliver/rtc"
+	"github.com/pingostack/livhub/internal/core/router"
+	"github.com/pingostack/livhub/internal/httpserv"
+	inter_rtc "github.com/pingostack/livhub/internal/rtc"
+	"github.com/pingostack/livhub/pkg/deliver/rtc"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )

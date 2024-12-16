@@ -3,9 +3,9 @@ package core
 import (
 	"context"
 
-	"github.com/pingostack/neon/internal/core/middleware"
-	"github.com/pingostack/neon/internal/core/router"
-	"github.com/pingostack/neon/pkg/eventemitter"
+	"github.com/pingostack/livhub/internal/core/middleware"
+	"github.com/pingostack/livhub/internal/core/router"
+	"github.com/pingostack/livhub/pkg/eventemitter"
 )
 
 type serv struct {

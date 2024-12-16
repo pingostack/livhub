@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingostack/neon/pkg/logger"
+	"github.com/pingostack/livhub/pkg/logger"
 	"github.com/pion/ice/v3"
 	"github.com/pion/webrtc/v4"
 	"github.com/sirupsen/logrus"

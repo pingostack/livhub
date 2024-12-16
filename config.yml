@@ -1,5 +1,5 @@
 logger: {
-  file: logs/neon.log,
+  file: logs/livhub.log,
   level: debug,
   formatter: text, # text or json
   format: '2006-01-02 15:04:05',

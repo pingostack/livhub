@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 
-	"github.com/pingostack/neon/pkg/logger"
+	"github.com/pingostack/livhub/pkg/logger"
 )
 
 type loggerWriter struct {

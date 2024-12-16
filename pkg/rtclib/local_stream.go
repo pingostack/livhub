@@ -3,10 +3,10 @@ package rtclib
 import (
 	"context"
 
-	"github.com/pingostack/neon/pkg/deliver"
-	"github.com/pingostack/neon/pkg/eventemitter"
-	"github.com/pingostack/neon/pkg/logger"
-	"github.com/pingostack/neon/pkg/rtclib/transport"
+	"github.com/pingostack/livhub/pkg/deliver"
+	"github.com/pingostack/livhub/pkg/eventemitter"
+	"github.com/pingostack/livhub/pkg/logger"
+	"github.com/pingostack/livhub/pkg/rtclib/transport"
 	"github.com/pkg/errors"
 )
 

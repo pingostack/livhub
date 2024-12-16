@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/let-light/gomodule"
-	feature_event "github.com/pingostack/neon/features/core"
-	"github.com/pingostack/neon/pkg/eventemitter"
+	feature_event "github.com/pingostack/livhub/features/core"
+	"github.com/pingostack/livhub/pkg/eventemitter"
 	"github.com/sirupsen/logrus"
 )
 

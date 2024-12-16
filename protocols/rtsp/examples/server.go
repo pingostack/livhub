@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/pingostack/neon/protocols/rtsp"
+	"github.com/pingostack/livhub/protocols/rtsp"
 	"github.com/sirupsen/logrus"
 )
 

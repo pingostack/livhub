@@ -1,17 +1,17 @@
 GO_LDFLAGS = -ldflags "-s -w"
 all: package
 
-.phony: init neon package clean
+.phony: init livhub package clean
 
 init:
 	go mod tidy
 	go generate ./...
 
-neon: init
+livhub: init
 	mkdir -p build/bin
-	go build -o build/bin/neon $(GO_LDFLAGS) cmd/neon/main.go
+	go build -o build/bin/livhub $(GO_LDFLAGS) cmd/livhub/main.go
 
-package: neon
+package: livhub
 	mkdir -p build/config
 	cp -n config.yml build/config/config.yml || true
 
@@ -20,9 +20,9 @@ clean:
 
 help:
 	@echo "make - same as make all"
-	@echo "make all - init, build neon, package"
+	@echo "make all - init, build livhub, package"
 	@echo "make init - init go mod"
-	@echo "make neon - build neon"
-	@echo "make package - package neon"
+	@echo "make livhub - build livhub"
+	@echo "make package - package livhub"
 	@echo "make clean - clean build"
 	@echo "make help - show help"

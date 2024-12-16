@@ -5,8 +5,8 @@ import (
 	"sync"
 
 	"github.com/let-light/gomodule"
-	feature_rtc "github.com/pingostack/neon/features/rtc"
-	"github.com/pingostack/neon/pkg/rtclib"
+	feature_rtc "github.com/pingostack/livhub/features/rtc"
+	"github.com/pingostack/livhub/pkg/rtclib"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )

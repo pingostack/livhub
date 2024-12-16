@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pingostack/neon/internal/core/middleware"
+	"github.com/pingostack/livhub/internal/core/middleware"
 	"github.com/sirupsen/logrus"
 )
 

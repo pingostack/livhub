@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/let-light/gomodule"
-	feature_whip "github.com/pingostack/neon/features/whip"
-	"github.com/pingostack/neon/internal/httpserv"
+	feature_whip "github.com/pingostack/livhub/features/whip"
+	"github.com/pingostack/livhub/internal/httpserv"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )

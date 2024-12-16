@@ -7,7 +7,7 @@ import (
 	"net"
 	"syscall"
 
-	"github.com/pingostack/neon/pkg/logger"
+	"github.com/pingostack/livhub/pkg/logger"
 )
 
 func init() {
