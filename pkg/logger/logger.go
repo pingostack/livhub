@@ -1,145 +1,117 @@
 package logger
 
-import (
-	"fmt"
+// Level represents the severity level of a log message
+type Level int
 
-	"github.com/pion/logging"
-	"github.com/sirupsen/logrus"
+const (
+	DebugLevel Level = iota
+	InfoLevel
+	WarnLevel
+	ErrorLevel
+	FatalLevel
 )
 
+// Logger defines the interface that any logging implementation must satisfy
 type Logger interface {
-	Trace(args ...interface{})
-	Tracef(format string, args ...interface{})
-	Debugf(format string, args ...interface{})
-	Infof(format string, args ...interface{})
-	Warnf(format string, args ...interface{})
-	Errorf(format string, args ...interface{})
 	Debug(args ...interface{})
+	Debugf(format string, args ...interface{})
 	Info(args ...interface{})
+	Infof(format string, args ...interface{})
 	Warn(args ...interface{})
+	Warnf(format string, args ...interface{})
 	Error(args ...interface{})
+	Errorf(format string, args ...interface{})
+	Fatal(args ...interface{})
+	Fatalf(format string, args ...interface{})
+	WithFields(fields map[string]interface{}) Logger
+	WithField(key string, value interface{}) Logger
+	WithError(err error) Logger
+	SetLevel(level Level)
 }
 
-var DefaultLogger Logger
+var defaultLogger Logger
 
-func init() {
-	DefaultLogger = &logrus.Logger{}
+// SetDefaultLogger sets the default logger implementation
+func SetDefaultLogger(l Logger) {
+	defaultLogger = l
 }
 
-func SetDefaultLogger(logger Logger) {
-	DefaultLogger = logger
+// GetDefaultLogger returns the current default logger
+func GetDefaultLogger() Logger {
+	return defaultLogger
 }
 
-type PionLogger struct {
-	logger Logger
-	scope  string
-}
+// func init() {
+// 	// Initialize the default logger with default configuration
+// 	defaultLogger = NewLogrusLoggerWithConfig(DefaultConfig())
+// }
 
-func (pl *PionLogger) Trace(msg string) {
-	pl.logger.Trace(fmt.Sprintf("scope[%s]", pl.scope), msg)
-}
-
-func (pl *PionLogger) Tracef(format string, args ...interface{}) {
-	pl.logger.Tracef(fmt.Sprintf("scope[%s] %s", pl.scope, format), args...)
-}
-
-func (pl *PionLogger) Debug(msg string) {
-	pl.logger.Debug(fmt.Sprintf("scope[%s]", pl.scope), msg)
-}
-
-func (pl *PionLogger) Debugf(format string, args ...interface{}) {
-	pl.logger.Debugf(fmt.Sprintf("scope[%s] %s", pl.scope, format), args...)
-}
-
-func (pl *PionLogger) Info(msg string) {
-	pl.logger.Info(fmt.Sprintf("scope[%s]", pl.scope), msg)
-}
-
-func (pl *PionLogger) Infof(format string, args ...interface{}) {
-	pl.logger.Infof(fmt.Sprintf("scope[%s] %s", pl.scope, format), args...)
-}
-
-func (pl *PionLogger) Warn(msg string) {
-	pl.logger.Warn(fmt.Sprintf("scope[%s]", pl.scope), msg)
-}
-
-func (pl *PionLogger) Warnf(format string, args ...interface{}) {
-	pl.logger.Warnf(fmt.Sprintf("scope[%s] %s", pl.scope, format), args...)
-}
-
-func (pl *PionLogger) Error(msg string) {
-	pl.logger.Error(fmt.Sprintf("scope[%s]", pl.scope), msg)
-}
-
-func (pl *PionLogger) Errorf(format string, args ...interface{}) {
-	pl.logger.Errorf(fmt.Sprintf("scope[%s] %s", pl.scope, format), args...)
-}
-
-type PionLoggerFactory struct {
-	defaultLogger Logger
-}
-
-func (lf *PionLoggerFactory) NewLogger(scope string) logging.LeveledLogger {
-	return &PionLogger{
-		logger: lf.defaultLogger,
-		scope:  scope,
-	}
-}
-
-func NewPionLoggerFactory(l Logger) *PionLoggerFactory {
-	if l == nil {
-		l = DefaultLogger
-	}
-
-	return &PionLoggerFactory{
-		defaultLogger: l,
-	}
-}
-
-func Trace(args ...interface{}) {
-	DefaultLogger.Trace(insertSpace(args))
-}
-
-func Tracef(format string, args ...interface{}) {
-	DefaultLogger.Tracef(format, args...)
-}
-
-func insertSpace(args ...interface{}) []interface{} {
-	newArgs := make([]interface{}, 0, len(args)*2)
-	for _, arg := range args {
-		newArgs = append(newArgs, arg, " ")
-	}
-	return newArgs
-}
-
+// Debug logs a message at DebugLevel using the default logger
 func Debug(args ...interface{}) {
-	DefaultLogger.Debug(insertSpace(args)...)
+	defaultLogger.Debug(args...)
 }
 
+// Debugf logs a formatted message at DebugLevel using the default logger
 func Debugf(format string, args ...interface{}) {
-	DefaultLogger.Debugf(format, args...)
+	defaultLogger.Debugf(format, args...)
 }
 
+// Info logs a message at InfoLevel using the default logger
 func Info(args ...interface{}) {
-	DefaultLogger.Info(insertSpace(args)...)
+	defaultLogger.Info(args...)
 }
 
+// Infof logs a formatted message at InfoLevel using the default logger
 func Infof(format string, args ...interface{}) {
-	DefaultLogger.Infof(format, args...)
+	defaultLogger.Infof(format, args...)
 }
 
+// Warn logs a message at WarnLevel using the default logger
 func Warn(args ...interface{}) {
-	DefaultLogger.Warn(insertSpace(args)...)
+	defaultLogger.Warn(args...)
 }
 
+// Warnf logs a formatted message at WarnLevel using the default logger
 func Warnf(format string, args ...interface{}) {
-	DefaultLogger.Warnf(format, args...)
+	defaultLogger.Warnf(format, args...)
 }
 
+// Error logs a message at ErrorLevel using the default logger
 func Error(args ...interface{}) {
-	DefaultLogger.Error(insertSpace(args)...)
+	defaultLogger.Error(args...)
 }
 
+// Errorf logs a formatted message at ErrorLevel using the default logger
 func Errorf(format string, args ...interface{}) {
-	DefaultLogger.Errorf(format, args...)
+	defaultLogger.Errorf(format, args...)
+}
+
+// Fatal logs a message at FatalLevel using the default logger
+func Fatal(args ...interface{}) {
+	defaultLogger.Fatal(args...)
+}
+
+// Fatalf logs a formatted message at FatalLevel using the default logger
+func Fatalf(format string, args ...interface{}) {
+	defaultLogger.Fatalf(format, args...)
+}
+
+// WithFields returns a new logger with the specified fields
+func WithFields(fields map[string]interface{}) Logger {
+	return defaultLogger.WithFields(fields)
+}
+
+// WithField returns a new logger with the specified field
+func WithField(key string, value interface{}) Logger {
+	return defaultLogger.WithField(key, value)
+}
+
+// WithError returns a new logger with the specified error
+func WithError(err error) Logger {
+	return defaultLogger.WithError(err)
+}
+
+// SetLevel sets the log level of the default logger
+func SetLevel(level Level) {
+	defaultLogger.SetLevel(level)
 }

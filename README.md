@@ -1,10 +1,10 @@
 # Livhub
-## Neon是什么
+## Livhub是什么
 
-- Neon是使用golang研发的一款流媒体服务器系统，它具备灵活的可扩展性和丰富的流媒体协议。
-- Neon具有优秀的模块化开发架构。Neon的模块具有高内聚低耦合特点，你可以灵活定制开发属于业务模块。
-- Neon将会支持WebRTC、Rtmp、HLS、SIP、Http-FLV、Rtsp等主流流媒体协议。
-- 在网络传输方面，除了rtp over dtls、之外，Neon将会支持QUIC传输。
+- Livhub是使用golang研发的一款流媒体服务器系统，它具备灵活的可扩展性和丰富的流媒体协议。
+- Livhub具有优秀的模块化开发架构。Livhub的模块具有高内聚低耦合特点，你可以灵活定制开发属于业务模块。
+- Livhub将会支持WebRTC、Rtmp、HLS、SIP、Http-FLV、Rtsp等主流流媒体协议。
+- 在网络传输方面，除了rtp over dtls、之外，Livhub将会支持QUIC传输。
 
 ## What is the Livhub
 
