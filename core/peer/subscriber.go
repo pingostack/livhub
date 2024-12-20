@@ -9,5 +9,5 @@ type Subscriber interface {
 	Format() avframe.FmtType
 	AudioCodecSupported() []avframe.CodecType
 	VideoCodecSupported() []avframe.CodecType
-	SetProcessor(processor avframe.Processor)
+	OnActive(processor avframe.Processor)
 }

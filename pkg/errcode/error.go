@@ -52,7 +52,9 @@ const (
 	ErrSubAlreadyExists    = 105
 	ErrPublisherNotSet     = 106
 	ErrPublisherIsNil      = 107
-	ErrPublisherAlreadySet = 108
+	ErrPublisherNotMatch   = 108
+	ErrPublisherAlreadySet = 109
+	ErrSubStreamNotExists  = 110
 )
 
 func ErrString(code int) string {
@@ -85,8 +87,12 @@ func ErrString(code int) string {
 		return "publisher not set"
 	case ErrPublisherIsNil:
 		return "publisher is nil"
+	case ErrPublisherNotMatch:
+		return "publisher not match"
 	case ErrPublisherAlreadySet:
 		return "publisher already set"
+	case ErrSubStreamNotExists:
+		return "sub stream not exists"
 
 	default:
 		return "unknown error"

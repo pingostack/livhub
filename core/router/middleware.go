@@ -84,8 +84,8 @@ var publishChain = &MiddlewareChain[peer.Publisher]{}
 var subscribeChain = &MiddlewareChain[peer.Subscriber]{}
 var streamChain = &MiddlewareChain[*stream.Stream]{}
 var metadataChain = &MiddlewareChain[avframe.Metadata]{}
-var pullChain = &MiddlewareChain[peer.Publisher]{}
-var pushChain = &MiddlewareChain[peer.Subscriber]{}
+var pullChain = &MiddlewareChain[*stream.Stream]{}
+var pushChain = &MiddlewareChain[*stream.Stream]{}
 
 // RegisterPublishMiddleware adds a publish middleware
 func RegisterPublishMiddleware(mw MiddlewareFunc[peer.Publisher]) {
@@ -148,31 +148,31 @@ func BuildMetadataMiddleware(ctx context.Context, final MiddlewareFunc[avframe.M
 }
 
 // RegisterPullMiddleware adds a pull middleware
-func RegisterPullMiddleware(mw MiddlewareFunc[peer.Publisher]) {
+func RegisterPullMiddleware(mw MiddlewareFunc[*stream.Stream]) {
 	pullChain.RegisterMiddleware(mw)
 }
 
 // HandlePull handles the pull middleware chain
-func HandlePull(ctx context.Context, publisher peer.Publisher, stage Stage) error {
-	return pullChain.Handle(ctx, publisher, stage)
+func HandlePull(ctx context.Context, stream *stream.Stream, stage Stage) error {
+	return pullChain.Handle(ctx, stream, stage)
 }
 
 // BuildPullMiddleware builds the pull middleware chain
-func BuildPullMiddleware(ctx context.Context, final MiddlewareFunc[peer.Publisher]) MiddlewareFunc[peer.Publisher] {
+func BuildPullMiddleware(ctx context.Context, final MiddlewareFunc[*stream.Stream]) MiddlewareFunc[*stream.Stream] {
 	return pullChain.BuildChain(final)
 }
 
 // RegisterPushMiddleware adds a push middleware
-func RegisterPushMiddleware(mw MiddlewareFunc[peer.Subscriber]) {
+func RegisterPushMiddleware(mw MiddlewareFunc[*stream.Stream]) {
 	pushChain.RegisterMiddleware(mw)
 }
 
 // HandlePush handles the push middleware chain
-func HandlePush(ctx context.Context, subscriber peer.Subscriber, stage Stage) error {
-	return pushChain.Handle(ctx, subscriber, stage)
+func HandlePush(ctx context.Context, stream *stream.Stream, stage Stage) error {
+	return pushChain.Handle(ctx, stream, stage)
 }
 
 // BuildPushMiddleware builds the push middleware chain
-func BuildPushMiddleware(ctx context.Context, final MiddlewareFunc[peer.Subscriber]) MiddlewareFunc[peer.Subscriber] {
+func BuildPushMiddleware(ctx context.Context, final MiddlewareFunc[*stream.Stream]) MiddlewareFunc[*stream.Stream] {
 	return pushChain.BuildChain(final)
 }

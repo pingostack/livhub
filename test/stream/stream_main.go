@@ -62,7 +62,7 @@ func (s *TestSubscriber) VideoCodecSupported() []avframe.CodecType {
 	return []avframe.CodecType{avframe.CodecTypeH265}
 }
 
-func (s *TestSubscriber) SetProcessor(processor avframe.Processor) {
+func (s *TestSubscriber) OnActive(processor avframe.Processor) {
 	s.processor = processor
 }
 
@@ -147,7 +147,7 @@ func main() {
 		} else {
 			logger.Info("subscribe success, metadata: ", processor.Metadata())
 		}
-		sub.SetProcessor(processor)
+		sub.OnActive(processor)
 		ch <- struct{}{}
 	})
 
@@ -164,7 +164,7 @@ func main() {
 	logger.Info("publish success")
 
 	if processor != nil {
-		sub.SetProcessor(processor)
+		sub.OnActive(processor)
 	} else {
 		select {
 		case _, ok := <-ch:
@@ -180,7 +180,7 @@ func main() {
 	logger.Info("processor: ", processor.Metadata())
 
 	logger.Info("start feedback")
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 2; i++ {
 		if sub.processor != nil {
 			logger.Infof("sub metadata: %+v", sub.processor.Metadata())
 
@@ -202,10 +202,7 @@ func main() {
 		s.Close()
 	}()
 
-	err = s.Wait()
-	if err != nil {
-		logger.Fatal("run error: ", err)
-	}
+	<-s.Done()
 
 	if writeCount != readCount {
 		logger.Fatalf("write count(%d) != read count(%d)", writeCount, readCount)

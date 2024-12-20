@@ -68,7 +68,7 @@ func (ms *MockSubscriber) VideoCodecSupported() []avframe.CodecType {
 	return []avframe.CodecType{} // Return a mock codec type
 }
 
-func (ms *MockSubscriber) SetProcessor(processor avframe.Processor) {
+func (ms *MockSubscriber) OnActive(processor avframe.Processor) {
 	// Mock implementation
 }
 

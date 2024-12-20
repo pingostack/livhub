@@ -39,9 +39,6 @@ type Stream struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	runCtx    context.Context
-	runCancel context.CancelFunc
-
 	noopProcessor *avframe.Pipeline
 	demuxer       *avframe.Pipeline
 	audioDecoders map[avframe.CodecType]*avframe.Pipeline
@@ -85,8 +82,6 @@ func NewStream(ctx context.Context, id string, opts ...StreamOption) *Stream {
 		IdleTimeout: time.Second * DefaultIdleTimeoutSeconds,
 	}
 
-	runCtx, runCancel := context.WithCancel(ctx)
-
 	for _, opt := range opts {
 		opt(&settings)
 	}
@@ -95,8 +90,6 @@ func NewStream(ctx context.Context, id string, opts ...StreamOption) *Stream {
 		id:            id,
 		ctx:           ctx,
 		cancel:        cancel,
-		runCtx:        runCtx,
-		runCancel:     runCancel,
 		audioDecoders: make(map[avframe.CodecType]*avframe.Pipeline),
 		videoDecoders: make(map[avframe.CodecType]*avframe.Pipeline),
 		audioEncoders: make(map[avframe.CodecType]*avframe.Pipeline),
@@ -275,20 +268,12 @@ func (s *Stream) createSubStream(subFmtType avframe.FmtType, fmtSupported avfram
 			WithLogger(s.logger.WithField("substream", processor.Format())))
 
 		go func(ss *subStream) {
-			if err := ss.Wait(); err != nil {
-				s.logger.WithFields(map[string]interface{}{
-					"err": err,
-				}).Error("run substream failed")
+			<-ss.Done()
+			s.lock.Lock()
+			defer s.lock.Unlock()
+			if s.subStreams[ss.Format()] == ss {
+				delete(s.subStreams, ss.Format())
 			}
-
-			defer func() {
-				s.lock.Lock()
-				defer s.lock.Unlock()
-
-				if s.subStreams[ss.Format()] == ss {
-					delete(s.subStreams, ss.Format())
-				}
-			}()
 		}(ss)
 		return
 	}
@@ -505,15 +490,40 @@ func (s *Stream) Publish(publisher peer.Publisher) error {
 	return nil
 }
 
-func (s *Stream) Unsubscribe(sub peer.Subscriber) {
+func (s *Stream) Unpublish(publisher peer.Publisher) error {
+	s.logger.Info("unpublish")
+
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if atomic.LoadUint32(&s.closed) == 1 {
+		return errcode.New(errcode.ErrStreamClosed, nil)
+	}
+
+	if publisher != s.publisher {
+		return errcode.New(errcode.ErrPublisherNotMatch, nil)
+	}
+
+	if s.publisher == nil {
+		return errcode.New(errcode.ErrPublisherNotSet, nil)
+	}
+
+	s.publisher = nil
+
+	return nil
+}
+
+func (s *Stream) Unsubscribe(sub peer.Subscriber) error {
 	s.logger.WithField("sub", sub).Info("unsubscribe")
 
 	fmtType := sub.Format()
 	subStream := s.GetSubStream(fmtType)
 	if subStream == nil {
-		return
+		return errcode.New(errcode.ErrSubStreamNotExists, nil)
 	}
 	subStream.Unsubscribe(sub)
+
+	return nil
 }
 
 func (s *Stream) destory() {
@@ -552,6 +562,9 @@ func (s *Stream) destory() {
 	for _, muxer := range s.muxers {
 		muxer.Close()
 	}
+
+	close(s.chWaitPublisher)
+	close(s.chPublisherSwapped)
 }
 
 func (s *Stream) processPublisherStream(publisher peer.Publisher) (err error) {
@@ -563,7 +576,7 @@ func (s *Stream) processPublisherStream(publisher peer.Publisher) (err error) {
 
 	for {
 		select {
-		case <-s.runCtx.Done():
+		case <-s.ctx.Done():
 			return nil
 		case <-s.chPublisherSwapped:
 			s.logger.Info("swapped publisher")
@@ -592,46 +605,38 @@ func (s *Stream) getCurrentPublisher() peer.Publisher {
 	return publisher
 }
 
-func (s *Stream) getOrWaitPublisher() (peer.Publisher, error) {
-	publisher := s.getCurrentPublisher()
-
-	if publisher != nil {
-		return publisher, nil
-	}
-
-	select {
-	case <-s.runCtx.Done():
-		return nil, s.ctx.Err()
-	case <-s.chWaitPublisher:
-		return s.getCurrentPublisher(), nil
-	}
-}
-
 func (s *Stream) run() {
 	defer func() {
 		if r := recover(); r != nil {
 			s.logger.WithError(fmt.Errorf("panic: %v", r)).Error("stream run panic")
 		}
+
+		if s.ctx.Err() == nil {
+			s.cancel()
+		}
+
 		s.destory()
-		s.cancel()
 	}()
 
 	for {
 		select {
-		case <-s.runCtx.Done():
+		case <-s.ctx.Done():
 			return
 		default:
 		}
 
-		publisher, err := s.getOrWaitPublisher()
-		if err != nil {
-			s.logger.WithError(err).Error("get or wait publisher")
-			return
-		}
+		publisher := s.getCurrentPublisher()
 
 		if publisher == nil {
-			s.logger.Warnf("publisher is nil")
-			return
+			select {
+			case <-s.ctx.Done():
+				return
+			case <-s.chWaitPublisher:
+				publisher = s.getCurrentPublisher()
+				if publisher == nil {
+					panic("publisher is nil")
+				}
+			}
 		}
 
 		if err := s.processPublisherStream(publisher); err != nil {
@@ -644,21 +649,11 @@ func (s *Stream) run() {
 func (s *Stream) Close() error {
 	s.logger.Info("stream close")
 
-	if !atomic.CompareAndSwapUint32(&s.closed, 0, 1) {
-		return errcode.New(errcode.ErrStreamClosed, nil)
-	}
-
-	s.runCancel()
+	s.cancel()
 
 	return nil
 }
 
-func (s *Stream) Wait() error {
-	<-s.ctx.Done()
-
-	if errors.Is(s.ctx.Err(), context.Canceled) {
-		return nil
-	}
-
-	return s.ctx.Err()
+func (s *Stream) Done() <-chan struct{} {
+	return s.ctx.Done()
 }

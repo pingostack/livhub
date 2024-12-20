@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingostack/livhub/core/peer"
@@ -32,12 +33,11 @@ type subStream struct {
 	cancel            context.CancelFunc
 	subscribers       []subscriberInfo
 	lock              sync.RWMutex
-	closeOnce         sync.Once
 	tailProcessor     *avframe.Pipeline
 	onSubscriberEmpty func(sub peer.Subscriber)
 	onSubStreamClosed func()
 	logger            logger.Logger
-	closed            bool
+	closed            uint32
 
 	idleTimer *time.Timer
 }
@@ -113,6 +113,10 @@ func (ss *subStream) Subscribe(sub peer.Subscriber) (err error) {
 
 	ss.lock.Lock()
 	defer ss.lock.Unlock()
+	if atomic.LoadUint32(&ss.closed) == 1 {
+		return errcode.New(errcode.ErrSubStreamClosed, nil)
+	}
+
 	for _, s := range ss.subscribers {
 		if s.subscriber == sub {
 			return errcode.New(errcode.ErrSubAlreadyExists, errors.New("sub already exists"))
@@ -133,9 +137,11 @@ func (ss *subStream) Unsubscribe(sub peer.Subscriber) error {
 
 	ss.lock.Lock()
 	defer ss.lock.Unlock()
-	if ss.closed {
+
+	if atomic.LoadUint32(&ss.closed) == 1 {
 		return errcode.New(errcode.ErrSubStreamClosed, nil)
 	}
+
 	for i, s := range ss.subscribers {
 		if s.subscriber == sub {
 			ss.subscribers = append(ss.subscribers[:i], ss.subscribers[i+1:]...)
@@ -168,7 +174,7 @@ func (ss *subStream) Feedback(fb *avframe.Feedback) error {
 	ss.lock.RLock()
 	defer ss.lock.RUnlock()
 
-	if ss.closed {
+	if atomic.LoadUint32(&ss.closed) == 1 {
 		return errcode.New(errcode.ErrSubStreamClosed, nil)
 	}
 
@@ -205,22 +211,19 @@ func (ss *subStream) Format() avframe.FmtType {
 	return ss.tailProcessor.Format()
 }
 
-func (ss *subStream) destory() {
-	ss.closeOnce.Do(func() {
-		ss.logger.Info("substream destory")
-
-		ss.lock.Lock()
-		defer ss.lock.Unlock()
-		for _, sub := range ss.subscribers {
-			sub.subscriber.Close()
-		}
-
-		ss.closed = true
-	})
-}
-
 func (ss *subStream) Close() error {
 	ss.logger.Info("closing substream")
+
+	ss.lock.Lock()
+	defer ss.lock.Unlock()
+
+	if !atomic.CompareAndSwapUint32(&ss.closed, 0, 1) {
+		return errcode.New(errcode.ErrSubStreamClosed, nil)
+	}
+
+	for _, sub := range ss.subscribers {
+		sub.subscriber.Close()
+	}
 
 	ss.cancel()
 
@@ -247,13 +250,6 @@ func (ss *subStream) SetIdleTimeout(d time.Time) error {
 	return nil
 }
 
-func (ss *subStream) Wait() error {
-	<-ss.ctx.Done()
-	ss.destory()
-
-	if errors.Is(ss.ctx.Err(), context.Canceled) {
-		return nil
-	}
-
-	return ss.ctx.Err()
+func (ss *subStream) Done() <-chan struct{} {
+	return ss.ctx.Done()
 }
