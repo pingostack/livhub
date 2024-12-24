@@ -45,13 +45,16 @@ func (r *Router) Stream() *stream.Stream {
 }
 
 func (r *Router) Publish(publisher peer.Publisher) error {
-	return BuildPublishMiddleware(r.ctx, func(ctx context.Context, publisher peer.Publisher, _ Stage) error {
+	return BuildPublishMiddleware(r.ctx, func(ctx context.Context, publisher peer.Publisher, stage Stage) error {
 		err := r.stream.Publish(publisher)
 
 		if err != nil {
 			return err
 		}
-		BuildPublishMiddleware(r.ctx, nil)(r.ctx, publisher, StageStart)
+
+		BuildPushMiddleware(r.ctx, func(ctx context.Context, s *stream.Stream, stage Stage) error {
+			return nil
+		})(r.ctx, r.stream, StageStart)
 
 		return nil
 	})(r.ctx, publisher, StageStart)
@@ -78,7 +81,9 @@ func (r *Router) Subscribe(subscriber peer.Subscriber) error {
 			}
 
 			r.logger.WithField("subscriber", subscriber).Info("subscriber not set")
-			BuildPullMiddleware(r.ctx, nil)(r.ctx, r.stream, StageStart)
+			BuildPullMiddleware(r.ctx, func(ctx context.Context, s *stream.Stream, stage Stage) error {
+				return nil
+			})(r.ctx, r.stream, StageStart)
 
 			return nil
 		}
@@ -106,8 +111,13 @@ func (r *Router) Done() <-chan struct{} {
 func (r *Router) destory() {
 	r.logger.Info("router destory")
 
-	BuildStreamMiddleware(r.ctx, nil)(r.ctx, r.stream, StageEnd)
-	BuildPullMiddleware(r.ctx, nil)(r.ctx, r.stream, StageEnd)
+	BuildStreamMiddleware(r.ctx, func(ctx context.Context, s *stream.Stream, stage Stage) error {
+		return nil
+	})(r.ctx, r.stream, StageEnd)
+
+	BuildPullMiddleware(r.ctx, func(ctx context.Context, s *stream.Stream, stage Stage) error {
+		return nil
+	})(r.ctx, r.stream, StageEnd)
 }
 
 func (r *Router) run() {
@@ -124,7 +134,9 @@ func (r *Router) run() {
 		r.destory()
 	}()
 
-	BuildStreamMiddleware(r.ctx, nil)(r.ctx, r.stream, StageStart)
+	BuildStreamMiddleware(r.ctx, func(ctx context.Context, s *stream.Stream, stage Stage) error {
+		return nil
+	})(r.ctx, r.stream, StageStart)
 
 	for {
 		select {

@@ -529,38 +529,51 @@ func (s *Stream) Unsubscribe(sub peer.Subscriber) error {
 func (s *Stream) destory() {
 	s.logger.Info("stream destory")
 
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
 	if !atomic.CompareAndSwapUint32(&s.closed, 0, 1) {
 		return
 	}
 
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
 	if s.demuxer != nil {
 		s.demuxer.Close()
 	}
+	s.demuxer = nil
 	if s.noopProcessor != nil {
 		s.noopProcessor.Close()
 	}
+	s.noopProcessor = nil
 
 	for _, subStream := range s.subStreams {
 		subStream.Close()
 	}
+	s.subStreams = nil
 
 	for _, decoder := range s.audioDecoders {
 		decoder.Close()
 	}
+	s.audioDecoders = nil
 	for _, decoder := range s.videoDecoders {
 		decoder.Close()
 	}
+	s.videoDecoders = nil
 	for _, encoder := range s.audioEncoders {
 		encoder.Close()
 	}
+	s.audioEncoders = nil
 	for _, encoder := range s.videoEncoders {
 		encoder.Close()
 	}
+	s.videoEncoders = nil
 	for _, muxer := range s.muxers {
 		muxer.Close()
+	}
+	s.muxers = nil
+
+	if s.publisher != nil {
+		s.publisher.Close()
+		s.publisher = nil
 	}
 
 	close(s.chWaitPublisher)
