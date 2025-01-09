@@ -111,6 +111,6 @@ func mapLevel(level Level) logrus.Level {
 
 func init() {
 	// Ensure the default logger outputs to console
-	defaultLogger := NewLogrusLogger(WithLogrusConfig(DefaultConfig()))
-	SetDefaultLogger(defaultLogger)
+	//	defaultLogger := NewLogrusLogger(WithLogrusConfig(DefaultConfig()))
+	//	SetDefaultLogger(defaultLogger)
 }

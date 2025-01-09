@@ -52,10 +52,6 @@ func (r *Router) Publish(publisher peer.Publisher) error {
 			return err
 		}
 
-		BuildPushMiddleware(r.ctx, func(ctx context.Context, s *stream.Stream, stage Stage) error {
-			return nil
-		})(r.ctx, r.stream, StageStart)
-
 		return nil
 	})(r.ctx, publisher, StageStart)
 }
@@ -81,9 +77,6 @@ func (r *Router) Subscribe(subscriber peer.Subscriber) error {
 			}
 
 			r.logger.WithField("subscriber", subscriber).Info("subscriber not set")
-			BuildPullMiddleware(r.ctx, func(ctx context.Context, s *stream.Stream, stage Stage) error {
-				return nil
-			})(r.ctx, r.stream, StageStart)
 
 			return nil
 		}
@@ -112,10 +105,6 @@ func (r *Router) destory() {
 	r.logger.Info("router destory")
 
 	BuildStreamMiddleware(r.ctx, func(ctx context.Context, s *stream.Stream, stage Stage) error {
-		return nil
-	})(r.ctx, r.stream, StageEnd)
-
-	BuildPullMiddleware(r.ctx, func(ctx context.Context, s *stream.Stream, stage Stage) error {
 		return nil
 	})(r.ctx, r.stream, StageEnd)
 }
