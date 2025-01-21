@@ -2,6 +2,7 @@ package logger
 
 import (
 	"fmt"
+	"os"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -23,7 +24,7 @@ func NewLoggerWithConfig(config zap.Config) Logger {
 	// Configure lumberjack for log rotation
 	lumberjackLogger := &lumberjack.Logger{
 		Filename:   "logs/app.log", // Log file path
-		MaxSize:    10,             // Maximum size of each log file (MB)
+		MaxSize:    100,            // Maximum size of each log file (MB)
 		MaxBackups: 5,              // Maximum number of backup files to keep
 		MaxAge:     30,             // Maximum number of days to keep log files
 		Compress:   true,           // Whether to compress backup log files
@@ -31,16 +32,35 @@ func NewLoggerWithConfig(config zap.Config) Logger {
 
 	// Set the encoder for the config
 	config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	config.EncoderConfig.EncodeDuration = zapcore.StringDurationEncoder
+	config.EncoderConfig.EncodeCaller = zapcore.ShortCallerEncoder
 
-	// Create a zapcore.Core that writes to lumberjack
-	core := zapcore.NewCore(
-		zapcore.NewConsoleEncoder(config.EncoderConfig),
-		zapcore.AddSync(lumberjackLogger), // Use lumberjack as output
-		config.Level,                      // Log level
+	// Create console encoder
+	consoleEncoder := zapcore.NewConsoleEncoder(config.EncoderConfig)
+
+	// Create cores for both console and file output
+	consoleCore := zapcore.NewCore(
+		consoleEncoder,
+		zapcore.AddSync(os.Stdout),
+		config.Level,
 	)
 
-	// Create the logger
-	logger := zap.New(core)
+	fileCore := zapcore.NewCore(
+		consoleEncoder,
+		zapcore.AddSync(lumberjackLogger),
+		config.Level,
+	)
+
+	// Combine the cores
+	core := zapcore.NewTee(consoleCore, fileCore)
+
+	// Create the logger with caller skip and stack trace
+	logger := zap.New(core,
+		zap.AddCaller(),
+		zap.AddCallerSkip(2), // Skip 2 levels to account for our logger wrapper
+		zap.AddStacktrace(zapcore.ErrorLevel),
+	)
 
 	return &zapLogger{logger: logger}
 }
