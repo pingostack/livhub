@@ -4,13 +4,16 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/pingostack/livhub/pkg/gortc"
 	"github.com/pingostack/livhub/pkg/logger"
 	"github.com/pingostack/livhub/pkg/plugo"
-	"github.com/pion/webrtc/v3"
+	"github.com/pion/webrtc/v4"
 )
 
 // Config represents the WHIP/WHEP server configuration
@@ -35,16 +38,22 @@ type ICEServer struct {
 	Credential string   `json:"credential" yaml:"credential"`
 }
 
+// Stream represents a WebRTC stream with its publisher and subscribers
+type Stream struct {
+	ID          string
+	Publisher   *gortc.Peer
+	Subscribers sync.Map // string -> *gortc.Peer
+}
+
 // Server implements the WHIP/WHEP signaling server
 type Server struct {
 	config     *Config
 	engine     *gin.Engine
-	peerConns  sync.Map // string -> *webrtc.PeerConnection
+	streams    sync.Map // string -> *Stream
 	httpServer *http.Server
 }
 
 var (
-	// Debug mode flag, can be set via build flag: -ldflags="-X github.com/pingostack/livhub/servers/whip.debugMode=true"
 	debugMode = "false"
 
 	defaultConfig = &Config{
@@ -59,12 +68,10 @@ var (
 			},
 		},
 	}
-	// global server instance for sharing across lifecycle functions
 	globalServer *Server
 )
 
 func init() {
-	// Register the WHIP/WHEP server plugin
 	err := plugo.RegisterPlugin("whip",
 		plugo.WithConfig("whip", defaultConfig, func(ctx context.Context, cfg interface{}) error {
 			if config, ok := cfg.(*Config); ok {
@@ -73,7 +80,6 @@ func init() {
 			}
 			return fmt.Errorf("invalid config type: %T", cfg)
 		}),
-		// Init phase: setup routes
 		plugo.WithInit(func(ctx context.Context) error {
 			if globalServer == nil {
 				return nil
@@ -81,7 +87,6 @@ func init() {
 			globalServer.setupRoutes()
 			return nil
 		}),
-		// Run phase: start HTTP server
 		plugo.WithRun(func(ctx context.Context) error {
 			if globalServer == nil {
 				return fmt.Errorf("server not initialized")
@@ -100,7 +105,6 @@ func init() {
 				}
 			}()
 
-			// Wait for context cancellation or server error
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -108,29 +112,33 @@ func init() {
 				return fmt.Errorf("http server error: %v", err)
 			}
 		}),
-		// Exit phase: shutdown HTTP server and cleanup resources
 		plugo.WithExit(func(ctx context.Context) error {
 			if globalServer == nil {
 				return nil
 			}
 
-			// Create a context with timeout for shutdown
 			shutdownCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
 
-			// Shutdown HTTP server
 			if globalServer.httpServer != nil {
 				if err := globalServer.httpServer.Shutdown(shutdownCtx); err != nil {
 					return fmt.Errorf("error shutting down server: %v", err)
 				}
 			}
 
-			// Cleanup all WebRTC connections
-			globalServer.peerConns.Range(func(key, value interface{}) bool {
-				if pc, ok := value.(*webrtc.PeerConnection); ok {
-					pc.Close()
+			// Cleanup all streams and peers
+			globalServer.streams.Range(func(key, value interface{}) bool {
+				if stream, ok := value.(*Stream); ok {
+					if stream.Publisher != nil {
+						stream.Publisher.Close()
+					}
+					stream.Subscribers.Range(func(_, subValue interface{}) bool {
+						if sub, ok := subValue.(*gortc.Peer); ok {
+							sub.Close()
+						}
+						return true
+					})
 				}
-				globalServer.peerConns.Delete(key)
 				return true
 			})
 
@@ -144,7 +152,6 @@ func init() {
 
 // NewServer creates a new WHIP/WHEP server instance
 func NewServer(config *Config) *Server {
-	// Set gin mode based on config
 	if config.Debug {
 		gin.SetMode(gin.DebugMode)
 		logger.Info("Running in debug mode")
@@ -153,7 +160,6 @@ func NewServer(config *Config) *Server {
 		logger.Info("Running in release mode")
 	}
 
-	// Create a logger with component field
 	log := logger.NewLogger().WithField("component", "gin")
 	gin.DefaultWriter = &loggerWriter{logger: log}
 
@@ -169,7 +175,262 @@ func NewServer(config *Config) *Server {
 	}
 }
 
-// loggerWriter implements io.Writer interface for gin logging
+// setupRoutes configures the HTTP routes for WHIP and WHEP
+func (s *Server) setupRoutes() {
+	s.engine.POST(s.config.WhipEndpoint, s.handleWhipPublish)
+	s.engine.DELETE(s.config.WhipEndpoint+"/*resourceId", s.handleWhipUnpublish)
+	s.engine.POST(s.config.WhepEndpoint, s.handleWhepSubscribe)
+	s.engine.DELETE(s.config.WhepEndpoint+"/*resourceId", s.handleWhepUnsubscribe)
+}
+
+// handleWhipPublish handles WHIP publishing requests
+func (s *Server) handleWhipPublish(c *gin.Context) {
+	log := logger.WithField("handler", "whip_publish")
+
+	var offer webrtc.SessionDescription
+	if err := c.ShouldBindJSON(&offer); err != nil {
+		log.WithError(err).Error("Failed to parse SDP offer")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid SDP offer"})
+		return
+	}
+
+	// Create peer config
+	config := gortc.PeerConfig{
+		ICEServers: make([]webrtc.ICEServer, len(s.config.ICEServers)),
+	}
+	for i, server := range s.config.ICEServers {
+		config.ICEServers[i] = webrtc.ICEServer{
+			URLs:       server.URLs,
+			Username:   server.Username,
+			Credential: server.Credential,
+		}
+	}
+
+	// Generate IDs
+	streamID := uuid.New().String()
+	resourceID := uuid.New().String()
+
+	// Create publisher peer
+	publisher, err := gortc.NewPeer(resourceID, gortc.PeerTypePublisher, config)
+	if err != nil {
+		log.WithError(err).Error("Failed to create peer")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create peer"})
+		return
+	}
+
+	// Create stream
+	stream := &Stream{
+		ID:        streamID,
+		Publisher: publisher,
+	}
+
+	// Handle new tracks
+	go func() {
+		for trackInfo := range publisher.OnTrack() {
+			info := trackInfo
+			log.WithField("track_id", info.ID).Info("New track received")
+
+			// Forward track to all subscribers
+			stream.Subscribers.Range(func(_, value interface{}) bool {
+				subscriber := value.(*gortc.Peer)
+				if _, err := subscriber.AddTrack(info); err != nil {
+					log.WithError(err).Error("Failed to add track to subscriber")
+				}
+				return true
+			})
+		}
+	}()
+
+	// Handle close
+	go func() {
+		<-publisher.OnClose()
+		s.cleanupPublisher(streamID, resourceID)
+	}()
+
+	// Set remote description
+	if err = publisher.SetRemoteDescription(offer.SDP); err != nil {
+		log.WithError(err).Error("Failed to set remote description")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to set remote description"})
+		return
+	}
+
+	// Store the stream
+	s.streams.Store(streamID, stream)
+
+	// Set response headers
+	c.Header("Location", fmt.Sprintf("%s/%s", s.config.WhipEndpoint, resourceID))
+	c.Header("Link", "</whep>;rel=channel")
+
+	// Return the answer
+	c.String(http.StatusCreated, publisher.GetLocalDescription())
+}
+
+// handleWhipUnpublish handles WHIP unpublishing requests
+func (s *Server) handleWhipUnpublish(c *gin.Context) {
+	resourceID := strings.TrimPrefix(c.Param("resourceId"), "/")
+	if resourceID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing resource ID"})
+		return
+	}
+
+	if err := s.cleanupPublisher("", resourceID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cleanup publisher"})
+		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
+// handleWhepSubscribe handles WHEP subscription requests
+func (s *Server) handleWhepSubscribe(c *gin.Context) {
+	log := logger.WithField("handler", "whep_subscribe")
+
+	var offer webrtc.SessionDescription
+	if err := c.ShouldBindJSON(&offer); err != nil {
+		log.WithError(err).Error("Failed to parse SDP offer")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid SDP offer"})
+		return
+	}
+
+	streamID := extractStreamIDFromSDP(offer.SDP)
+	if streamID == "" {
+		log.Error("No stream ID found in SDP")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No stream ID specified"})
+		return
+	}
+
+	streamValue, ok := s.streams.Load(streamID)
+	if !ok {
+		log.WithField("stream_id", streamID).Error("Stream not found")
+		c.JSON(http.StatusNotFound, gin.H{"error": "Stream not found"})
+		return
+	}
+	stream := streamValue.(*Stream)
+
+	// Create peer config
+	config := gortc.PeerConfig{
+		ICEServers: make([]webrtc.ICEServer, len(s.config.ICEServers)),
+	}
+	for i, server := range s.config.ICEServers {
+		config.ICEServers[i] = webrtc.ICEServer{
+			URLs:       server.URLs,
+			Username:   server.Username,
+			Credential: server.Credential,
+		}
+	}
+
+	// Generate resource ID
+	resourceID := uuid.New().String()
+
+	// Create subscriber peer
+	subscriber, err := gortc.NewPeer(resourceID, gortc.PeerTypeSubscriber, config)
+	if err != nil {
+		log.WithError(err).Error("Failed to create peer")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create peer"})
+		return
+	}
+
+	// Handle close
+	go func() {
+		<-subscriber.OnClose()
+		s.cleanupSubscriber(streamID, resourceID)
+	}()
+
+	// Set remote description
+	if err = subscriber.SetRemoteDescription(offer.SDP); err != nil {
+		log.WithError(err).Error("Failed to set remote description")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to set remote description"})
+		return
+	}
+
+	// Store the subscriber
+	stream.Subscribers.Store(resourceID, subscriber)
+
+	// Set response headers
+	c.Header("Location", fmt.Sprintf("%s/%s", s.config.WhepEndpoint, resourceID))
+
+	// Return the answer
+	c.String(http.StatusCreated, subscriber.GetLocalDescription())
+}
+
+// handleWhepUnsubscribe handles WHEP unsubscription requests
+func (s *Server) handleWhepUnsubscribe(c *gin.Context) {
+	resourceID := strings.TrimPrefix(c.Param("resourceId"), "/")
+	if resourceID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing resource ID"})
+		return
+	}
+
+	if err := s.cleanupSubscriber("", resourceID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cleanup subscriber"})
+		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
+// Helper functions
+
+func (s *Server) cleanupPublisher(streamID, resourceID string) error {
+	// If stream ID is not provided, find it
+	if streamID == "" {
+		s.streams.Range(func(key, value interface{}) bool {
+			stream := value.(*Stream)
+			if stream.Publisher != nil && stream.Publisher.ID() == resourceID {
+				streamID = key.(string)
+				return false
+			}
+			return true
+		})
+	}
+
+	// Remove the stream if found
+	if streamID != "" {
+		if streamValue, ok := s.streams.LoadAndDelete(streamID); ok {
+			stream := streamValue.(*Stream)
+			// Close publisher
+			if stream.Publisher != nil {
+				stream.Publisher.Close()
+			}
+			// Close all subscribers
+			stream.Subscribers.Range(func(_, value interface{}) bool {
+				if subscriber, ok := value.(*gortc.Peer); ok {
+					subscriber.Close()
+				}
+				return true
+			})
+		}
+	}
+
+	return nil
+}
+
+func (s *Server) cleanupSubscriber(streamID, resourceID string) error {
+	// If stream ID is not provided, find it
+	if streamID == "" {
+		s.streams.Range(func(key, value interface{}) bool {
+			stream := value.(*Stream)
+			if sub, ok := stream.Subscribers.LoadAndDelete(resourceID); ok {
+				if subscriber, ok := sub.(*gortc.Peer); ok {
+					subscriber.Close()
+				}
+				streamID = key.(string)
+				return false
+			}
+			return true
+		})
+	} else if streamValue, ok := s.streams.Load(streamID); ok {
+		stream := streamValue.(*Stream)
+		if sub, ok := stream.Subscribers.LoadAndDelete(resourceID); ok {
+			if subscriber, ok := sub.(*gortc.Peer); ok {
+				subscriber.Close()
+			}
+		}
+	}
+
+	return nil
+}
+
 type loggerWriter struct {
 	logger logger.Logger
 }
@@ -179,17 +440,14 @@ func (w *loggerWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-// requestLogger returns a gin middleware for logging requests
 func requestLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
 		raw := c.Request.URL.RawQuery
 
-		// Process request
 		c.Next()
 
-		// Log request details
 		if raw != "" {
 			path = path + "?" + raw
 		}
@@ -211,37 +469,15 @@ func requestLogger() gin.HandlerFunc {
 	}
 }
 
-// setupRoutes configures the HTTP routes for WHIP and WHEP
-func (s *Server) setupRoutes() {
-	// WHIP endpoint for publishers
-	s.engine.POST(s.config.WhipEndpoint, s.handleWhipPublish)
-	s.engine.DELETE(s.config.WhipEndpoint+"/*resourceId", s.handleWhipUnpublish)
-
-	// WHEP endpoint for players
-	s.engine.POST(s.config.WhepEndpoint, s.handleWhepSubscribe)
-	s.engine.DELETE(s.config.WhepEndpoint+"/*resourceId", s.handleWhepUnsubscribe)
-}
-
-// handleWhipPublish handles WHIP publishing requests
-func (s *Server) handleWhipPublish(c *gin.Context) {
-	// TODO: Implement WHIP publishing
-	c.Status(http.StatusNotImplemented)
-}
-
-// handleWhipUnpublish handles WHIP unpublishing requests
-func (s *Server) handleWhipUnpublish(c *gin.Context) {
-	// TODO: Implement WHIP unpublishing
-	c.Status(http.StatusNotImplemented)
-}
-
-// handleWhepSubscribe handles WHEP subscription requests
-func (s *Server) handleWhepSubscribe(c *gin.Context) {
-	// TODO: Implement WHEP subscription
-	c.Status(http.StatusNotImplemented)
-}
-
-// handleWhepUnsubscribe handles WHEP unsubscription requests
-func (s *Server) handleWhepUnsubscribe(c *gin.Context) {
-	// TODO: Implement WHEP unsubscription
-	c.Status(http.StatusNotImplemented)
+func extractStreamIDFromSDP(sdp string) string {
+	lines := strings.Split(sdp, "\r\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "a=group:BUNDLE ") {
+			parts := strings.Split(line, " ")
+			if len(parts) > 1 {
+				return parts[1]
+			}
+		}
+	}
+	return ""
 }
