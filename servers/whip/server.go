@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/im-pingo/mediatransportutil/pkg/rtcconfig"
 	"github.com/pingostack/livhub/pkg/gortc"
 	"github.com/pingostack/livhub/pkg/logger"
 	"github.com/pingostack/livhub/pkg/plugo"
@@ -24,18 +25,11 @@ type Config struct {
 	Debug  bool   `json:"debug" yaml:"debug"`
 
 	// WebRTC configuration
-	ICEServers []ICEServer `json:"ice_servers" yaml:"ice_servers"`
+	RTCConfig *rtcconfig.RTCConfig `json:"webrtc" yaml:"webrtc"`
 
 	// WHIP/WHEP endpoints
 	WhipEndpoint string `json:"whip_endpoint" yaml:"whip_endpoint"`
 	WhepEndpoint string `json:"whep_endpoint" yaml:"whep_endpoint"`
-}
-
-// ICEServer represents a STUN/TURN server configuration
-type ICEServer struct {
-	URLs       []string `json:"urls" yaml:"urls"`
-	Username   string   `json:"username" yaml:"username"`
-	Credential string   `json:"credential" yaml:"credential"`
 }
 
 // Stream represents a WebRTC stream with its publisher and subscribers
@@ -47,10 +41,11 @@ type Stream struct {
 
 // Server implements the WHIP/WHEP signaling server
 type Server struct {
-	config     *Config
-	engine     *gin.Engine
-	streams    sync.Map // string -> *Stream
-	httpServer *http.Server
+	config       *Config
+	engine       *gin.Engine
+	streams      sync.Map // string -> *Stream
+	httpServer   *http.Server
+	webrtcConfig *rtcconfig.WebRTCConfig
 }
 
 var (
@@ -62,11 +57,7 @@ var (
 		Debug:        debugMode == "true",
 		WhipEndpoint: "/whip",
 		WhepEndpoint: "/whep",
-		ICEServers: []ICEServer{
-			{
-				URLs: []string{"stun:stun.l.google.com:19302"},
-			},
-		},
+		RTCConfig:    &rtcconfig.RTCConfig{},
 	}
 	globalServer *Server
 )
@@ -196,14 +187,9 @@ func (s *Server) handleWhipPublish(c *gin.Context) {
 
 	// Create peer config
 	config := gortc.PeerConfig{
-		ICEServers: make([]webrtc.ICEServer, len(s.config.ICEServers)),
-	}
-	for i, server := range s.config.ICEServers {
-		config.ICEServers[i] = webrtc.ICEServer{
-			URLs:       server.URLs,
-			Username:   server.Username,
-			Credential: server.Credential,
-		}
+		RTCConfig:   s.webrtcConfig,
+		TrickleICE:  true,
+		IsPublisher: true,
 	}
 
 	// Generate IDs
@@ -309,14 +295,9 @@ func (s *Server) handleWhepSubscribe(c *gin.Context) {
 
 	// Create peer config
 	config := gortc.PeerConfig{
-		ICEServers: make([]webrtc.ICEServer, len(s.config.ICEServers)),
-	}
-	for i, server := range s.config.ICEServers {
-		config.ICEServers[i] = webrtc.ICEServer{
-			URLs:       server.URLs,
-			Username:   server.Username,
-			Credential: server.Credential,
-		}
+		RTCConfig:   s.webrtcConfig,
+		TrickleICE:  true,
+		IsPublisher: false,
 	}
 
 	// Generate resource ID

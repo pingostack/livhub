@@ -13,7 +13,7 @@ require (
 require (
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/gin-gonic/gin v1.10.0
-	github.com/im-pingo/mediatransportutil v0.0.0-20250121085111-1ee676d06aa9
+	github.com/im-pingo/mediatransportutil v0.0.0-20250123034341-003ff466cfd7
 	github.com/pion/webrtc/v4 v4.0.8
 	github.com/pkg/errors v0.9.1
 	go.uber.org/atomic v1.11.0
@@ -22,8 +22,6 @@ require (
 )
 
 require (
-	github.com/go-logr/logr v1.4.1 // indirect
-	github.com/livekit/protocol v1.5.10 // indirect
 	github.com/pion/dtls/v3 v3.0.4 // indirect
 	github.com/pion/ice/v4 v4.0.5 // indirect
 	github.com/pion/mdns/v2 v2.0.7 // indirect
@@ -31,7 +29,6 @@ require (
 	github.com/pion/stun/v3 v3.0.0 // indirect
 	github.com/pion/transport/v3 v3.0.7 // indirect
 	github.com/pion/turn/v4 v4.0.0 // indirect
-	github.com/zeebo/xxh3 v1.0.2 // indirect
 )
 
 require (

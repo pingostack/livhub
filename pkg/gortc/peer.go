@@ -21,8 +21,7 @@ const (
 
 // PeerConfig represents the configuration for a WebRTC peer
 type PeerConfig struct {
-	RTCConfig   *rtcconfig.WebRTCConfig
-	TrickleICE  bool
+	WebRTC      *rtcconfig.WebRTCConfig
 	IsPublisher bool
 }
 
@@ -46,6 +45,7 @@ type Peer struct {
 	log            logger.Logger
 	mu             sync.Mutex
 	trickleICE     bool
+	webrtcConfig   *rtcconfig.WebRTCConfig
 }
 
 // NewPeer creates a new WebRTC peer
@@ -53,20 +53,14 @@ func NewPeer(id string, peerType PeerType, config PeerConfig) (*Peer, error) {
 	var api *webrtc.API
 
 	// Create API with WebRTC config
-	if config.RTCConfig != nil {
-		api = webrtc.NewAPI(webrtc.WithSettingEngine(config.RTCConfig.SettingEngine))
+	if config.WebRTC != nil {
+		api = webrtc.NewAPI(webrtc.WithSettingEngine(config.WebRTC.SettingEngine))
 	} else {
 		api = webrtc.NewAPI()
 	}
 
-	// Create WebRTC configuration
-	webrtcConfig := webrtc.Configuration{
-		ICEServers:         config.RTCConfig.Configuration.ICEServers,
-		ICETransportPolicy: config.RTCConfig.Configuration.ICETransportPolicy,
-	}
-
 	// Create a new PeerConnection using the API
-	peerConnection, err := api.NewPeerConnection(webrtcConfig)
+	peerConnection, err := api.NewPeerConnection(config.WebRTC.Configuration)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create peer connection: %w", err)
 	}
@@ -79,7 +73,7 @@ func NewPeer(id string, peerType PeerType, config PeerConfig) (*Peer, error) {
 		onCloseChan:    make(chan struct{}),
 		onICECandidate: make(chan *webrtc.ICECandidate, 10),
 		log:            logger.WithField("module", "webrtc").WithField("peer_id", id),
-		trickleICE:     config.TrickleICE,
+		webrtcConfig:   config.WebRTC,
 	}
 
 	// Set up callbacks
@@ -278,14 +272,12 @@ func (p *Peer) setupCallbacks() {
 		}
 	})
 
-	// Handle ICE candidates if trickle ICE is enabled
-	if p.trickleICE {
-		p.conn.OnICECandidate(func(candidate *webrtc.ICECandidate) {
-			if candidate != nil {
-				p.onICECandidate <- candidate
-			}
-		})
-	}
+	// Handle ICE candidates
+	p.conn.OnICECandidate(func(candidate *webrtc.ICECandidate) {
+		if candidate != nil {
+			p.onICECandidate <- candidate
+		}
+	})
 
 	// Handle incoming tracks
 	p.conn.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
