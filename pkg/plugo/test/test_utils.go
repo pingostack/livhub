@@ -16,8 +16,9 @@ type TestPlugin struct {
 
 // TestConfig represents test configuration
 type TestConfig struct {
-	Name    string `json:"name" yaml:"name"`
-	Version int    `json:"version" yaml:"version"`
+	Name    string `mapstructure:"name"`
+	Version int    `mapstructure:"version"`
+	NodeID  string `mapstructure:"node_id"`
 }
 
 func (c *TestConfig) String() string {
