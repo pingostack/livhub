@@ -1,6 +1,7 @@
 package plugo
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -166,6 +167,13 @@ func (p *HTTPProvider) downloadConfig() error {
 	// Validate response body is valid config
 	if !p.isValidConfig(body) {
 		return fmt.Errorf("invalid config content")
+	}
+
+	// Check if content has changed
+	currentContent, err := os.ReadFile(p.localPath)
+	if err == nil && bytes.Equal(currentContent, body) {
+		// Content hasn't changed, no need to update
+		return nil
 	}
 
 	// Generate file paths

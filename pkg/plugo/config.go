@@ -45,22 +45,6 @@ func NewConfigLoader(ctx context.Context, onUpdate OnConfigUpdate) *ConfigLoader
 	}
 }
 
-// readConfig reads configuration from the provider into viper and notifies manager
-func (l *ConfigLoader) readConfig() error {
-	// Make sure we're reading the correct file
-	l.viper.SetConfigFile(l.provider.LocalPath())
-	if err := l.viper.ReadInConfig(); err != nil {
-		return fmt.Errorf("failed to read config: %w", err)
-	}
-
-	// Notify about the update with latest viper content
-	if l.onUpdate != nil {
-		l.onUpdate(l.viper)
-	}
-
-	return nil
-}
-
 // SetProvider sets the configuration provider
 func (l *ConfigLoader) SetProvider(provider ConfigProvider) error {
 	l.mu.Lock()
@@ -88,18 +72,6 @@ func (l *ConfigLoader) SetProvider(provider ConfigProvider) error {
 	}
 
 	return nil
-}
-
-// LoadConfig loads the configuration for the registered type
-func (l *ConfigLoader) LoadConfig() error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	if l.provider == nil {
-		return fmt.Errorf("no provider set")
-	}
-
-	return l.readConfig()
 }
 
 // GetViper returns the viper instance
