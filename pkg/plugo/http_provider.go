@@ -10,7 +10,13 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"time"
+
+	"encoding/json"
+
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -34,6 +40,10 @@ type HTTPProvider struct {
 	httpClient   *http.Client
 	options      *RemoteConfigOptions
 	fileProvider *FileProvider
+	ctx          context.Context
+	cancel       context.CancelFunc
+	onUpdate     func()
+	writeMu      sync.Mutex // Protect file writes
 }
 
 var DefaultRemoteConfigOptions = &RemoteConfigOptions{
@@ -70,14 +80,41 @@ func NewHTTPProvider(urlStr string, format string, options *RemoteConfigOptions)
 		return nil, fmt.Errorf("failed to create file provider: %w", err)
 	}
 
-	return &HTTPProvider{
+	ctx, cancel := context.WithCancel(context.Background())
+	provider := &HTTPProvider{
 		url:          urlStr,
 		format:       format,
 		localPath:    localPath,
 		httpClient:   &http.Client{Timeout: time.Second * 10},
 		options:      options,
 		fileProvider: fileProvider,
-	}, nil
+		ctx:          ctx,
+		cancel:       cancel,
+	}
+
+	// Start polling if interval is set
+	if options.PollInterval > 0 {
+		go provider.startPolling()
+	}
+
+	return provider, nil
+}
+
+// startPolling starts a goroutine to periodically poll for config updates
+func (p *HTTPProvider) startPolling() {
+	ticker := time.NewTicker(p.options.PollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-p.ctx.Done():
+			return
+		case <-ticker.C:
+			if err := p.downloadConfig(p.ctx); err != nil {
+				fmt.Printf("Warning: failed to poll config from %s: %v\n", p, err)
+			}
+		}
+	}
 }
 
 // downloadConfig downloads the remote configuration to local file
@@ -85,13 +122,13 @@ func (p *HTTPProvider) downloadConfig(ctx context.Context) error {
 	// Check if local file exists before attempting download
 	if _, err := os.Stat(p.localPath); err == nil {
 		// Local file exists, try download but fallback to existing file if fails
-		if err := p.tryDownload(ctx); err != nil {
+		if err := p.tryDownload(); err != nil {
 			fmt.Printf("Warning: failed to download config from %s: %v, using existing file\n", p, err)
 			return nil
 		}
 	} else {
 		// No local file, must download successfully
-		if err := p.tryDownload(ctx); err != nil {
+		if err := p.tryDownload(); err != nil {
 			return fmt.Errorf("failed to download config and no local file exists: %w", err)
 		}
 	}
@@ -99,24 +136,35 @@ func (p *HTTPProvider) downloadConfig(ctx context.Context) error {
 }
 
 // tryDownload attempts to download the remote config
-func (p *HTTPProvider) tryDownload(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, "GET", p.url, nil)
+func (p *HTTPProvider) tryDownload() error {
+	// Get response body first
+	resp, err := p.httpClient.Get(p.url)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to fetch config: %w", err)
+		return fmt.Errorf("failed to download config: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to fetch config, status code: %d", resp.StatusCode)
+		return fmt.Errorf("failed to download config: status %d", resp.StatusCode)
 	}
 
-	// Create a temporary file in the same directory
-	tmpFile := p.localPath + ".tmp"
+	// Read entire response into memory to validate it
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Validate response body is valid config
+	if !p.isValidConfig(body) {
+		return fmt.Errorf("invalid config content")
+	}
+
+	// Generate file paths
+	basePath := strings.TrimSuffix(p.localPath, filepath.Ext(p.localPath))
+	tmpFile := basePath + ".tmp" + filepath.Ext(p.localPath)
+	completeFile := basePath + ".complete" + filepath.Ext(p.localPath)
+
+	// Create temporary file
 	f, err := os.Create(tmpFile)
 	if err != nil {
 		return fmt.Errorf("failed to create temporary file: %w", err)
@@ -129,8 +177,8 @@ func (p *HTTPProvider) tryDownload(ctx context.Context) error {
 		}
 	}()
 
-	// Copy response body to temporary file
-	if _, err = io.Copy(f, resp.Body); err != nil {
+	// Write the entire content at once
+	if _, err = f.Write(body); err != nil {
 		return fmt.Errorf("failed to write config to temporary file: %w", err)
 	}
 
@@ -139,17 +187,54 @@ func (p *HTTPProvider) tryDownload(ctx context.Context) error {
 		return fmt.Errorf("failed to sync temporary file: %w", err)
 	}
 
-	// Close the file before renaming
+	// Close the file before further operations
 	if err = f.Close(); err != nil {
 		return fmt.Errorf("failed to close temporary file: %w", err)
 	}
 
-	// Atomically replace the old file with the new one
-	if err = os.Rename(tmpFile, p.localPath); err != nil {
-		return fmt.Errorf("failed to replace config file: %w", err)
+	// Rename tmp to complete
+	if err = os.Rename(tmpFile, completeFile); err != nil {
+		return fmt.Errorf("failed to rename tmp to complete: %w", err)
+	}
+
+	// Remove old symlink if it exists
+	os.Remove(p.localPath)
+
+	// Create new symlink pointing to complete file
+	if err = os.Symlink(filepath.Base(completeFile), p.localPath); err != nil {
+		// If symlink fails, clean up the complete file
+		os.Remove(completeFile)
+		return fmt.Errorf("failed to create symlink: %w", err)
+	}
+
+	// Clean up old complete files
+	pattern := basePath + ".complete*"
+	oldFiles, _ := filepath.Glob(pattern)
+	for _, f := range oldFiles {
+		// Skip the current complete file
+		if f == completeFile {
+			continue
+		}
+		os.Remove(f)
 	}
 
 	return nil
+}
+
+// isValidConfig checks if the config content is valid
+func (p *HTTPProvider) isValidConfig(content []byte) bool {
+	// For JSON format
+	if p.format == "json" {
+		return json.Valid(content)
+	}
+
+	// For YAML format
+	if p.format == "yaml" || p.format == "yml" {
+		var out interface{}
+		return yaml.Unmarshal(content, &out) == nil
+	}
+
+	return true // For other formats, assume valid
 }
 
 // Read downloads the remote config and delegates to FileProvider
@@ -165,10 +250,12 @@ func (p *HTTPProvider) String() string {
 	return p.url
 }
 
-// Close cleans up temporary files
+// Close cleans up temporary files and stops polling
 func (p *HTTPProvider) Close() error {
+	if p.cancel != nil {
+		p.cancel()
+	}
 	//return os.Remove(p.localPath)
-
 	return nil
 }
 

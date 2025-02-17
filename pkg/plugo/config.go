@@ -1,7 +1,6 @@
 package plugo
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -63,16 +62,12 @@ func (l *ConfigLoader) readConfig() error {
 		}
 	}()
 
-	// Create a buffer to store the content
-	var buf bytes.Buffer
-	teeReader := io.TeeReader(reader, &buf)
-
 	if format != "" {
 		l.viper.SetConfigType(format)
 	}
 
-	// Read config using the tee reader
-	if err := l.viper.ReadConfig(teeReader); err != nil {
+	// Read config using the reader
+	if err := l.viper.ReadConfig(reader); err != nil {
 		return fmt.Errorf("failed to read config: %w", err)
 	}
 
@@ -104,28 +99,28 @@ func (l *ConfigLoader) SetProvider(provider ConfigProvider) error {
 		}
 	}()
 
-	// Create a buffer to store the content
-	var buf bytes.Buffer
-	teeReader := io.TeeReader(reader, &buf)
-
 	if format != "" {
 		l.viper.SetConfigType(format)
 	}
 
-	// Read config using the tee reader
-	if err := l.viper.ReadConfig(teeReader); err != nil {
+	// Read config using the reader
+	if err := l.viper.ReadConfig(reader); err != nil {
 		return fmt.Errorf("failed to read config: %w", err)
 	}
 
-	// Set up file watching if it's a file provider
-
+	// Set up file watching
 	l.viper.SetConfigFile(provider.LocalPath())
+	l.viper.WatchConfig()
 	l.viper.OnConfigChange(func(in fsnotify.Event) {
+		// Re-establish watch on the new file after rename
+		if in.Op&fsnotify.Create == fsnotify.Create {
+			l.viper.SetConfigFile(provider.LocalPath())
+			l.viper.WatchConfig()
+		}
 		if err := l.readConfig(); err != nil {
 			logger.WithError(err).Warnf("Failed to read config")
 		}
 	})
-	l.viper.WatchConfig()
 
 	// Notify about the update with latest viper content
 	if l.onUpdate != nil {
