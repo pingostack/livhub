@@ -48,8 +48,9 @@ test:
 
 	// Create HTTP provider with YAML format and short poll interval
 	pollInterval := time.Millisecond * 100
-	provider, err := plugo.NewHTTPProvider(ts.URL, "yaml", &plugo.RemoteConfigOptions{
+	provider, err := plugo.NewHTTPProvider(ts.URL, &plugo.RemoteConfigOptions{
 		PollInterval: pollInterval,
+		Format:       "yaml",
 	})
 	assert.NoError(t, err, "Creating HTTP provider should succeed")
 	defer provider.Close()
@@ -121,8 +122,9 @@ func TestRemoteConfigProviderJSON(t *testing.T) {
 
 	// Create HTTP provider with JSON format and short poll interval
 	pollInterval := time.Millisecond * 100
-	provider, err := plugo.NewHTTPProvider(ts.URL, "json", &plugo.RemoteConfigOptions{
+	provider, err := plugo.NewHTTPProvider(ts.URL, &plugo.RemoteConfigOptions{
 		PollInterval: pollInterval,
+		Format:       "json",
 	})
 	assert.NoError(t, err, "Creating HTTP provider should succeed")
 	defer provider.Close()
