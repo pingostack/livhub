@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"encoding/json"
@@ -42,8 +41,6 @@ type HTTPProvider struct {
 	fileProvider *FileProvider
 	ctx          context.Context
 	cancel       context.CancelFunc
-	onUpdate     func()
-	writeMu      sync.Mutex // Protect file writes
 }
 
 var DefaultRemoteConfigOptions = &RemoteConfigOptions{
@@ -110,7 +107,7 @@ func (p *HTTPProvider) startPolling() {
 		case <-p.ctx.Done():
 			return
 		case <-ticker.C:
-			if err := p.downloadConfig(p.ctx); err != nil {
+			if err := p.downloadConfig(); err != nil {
 				fmt.Printf("Warning: failed to poll config from %s: %v\n", p, err)
 			}
 		}
@@ -118,7 +115,7 @@ func (p *HTTPProvider) startPolling() {
 }
 
 // downloadConfig downloads the remote configuration to local file
-func (p *HTTPProvider) downloadConfig(ctx context.Context) error {
+func (p *HTTPProvider) downloadConfig() error {
 	// Check if local file exists before attempting download
 	if _, err := os.Stat(p.localPath); err == nil {
 		// Local file exists, try download but fallback to existing file if fails
@@ -197,14 +194,28 @@ func (p *HTTPProvider) tryDownload() error {
 		return fmt.Errorf("failed to rename tmp to complete: %w", err)
 	}
 
-	// Remove old symlink if it exists
-	os.Remove(p.localPath)
+	// Check if symlink needs to be created or updated
+	needNewSymlink := false
+	if link, err := os.Readlink(p.localPath); err != nil {
+		if os.IsNotExist(err) {
+			// Symlink doesn't exist
+			needNewSymlink = true
+		} else {
+			return fmt.Errorf("failed to read symlink: %w", err)
+		}
+	} else if link != filepath.Base(completeFile) {
+		// Symlink exists but points to a different file
+		needNewSymlink = true
+		os.Remove(p.localPath)
+	}
 
-	// Create new symlink pointing to complete file
-	if err = os.Symlink(filepath.Base(completeFile), p.localPath); err != nil {
-		// If symlink fails, clean up the complete file
-		os.Remove(completeFile)
-		return fmt.Errorf("failed to create symlink: %w", err)
+	// Create new symlink if needed
+	if needNewSymlink {
+		if err = os.Symlink(filepath.Base(completeFile), p.localPath); err != nil {
+			// If symlink fails, clean up the complete file
+			os.Remove(completeFile)
+			return fmt.Errorf("failed to create symlink: %w", err)
+		}
 	}
 
 	// Clean up old complete files
@@ -239,7 +250,7 @@ func (p *HTTPProvider) isValidConfig(content []byte) bool {
 
 // Read downloads the remote config and delegates to FileProvider
 func (p *HTTPProvider) Read(ctx context.Context) (io.Reader, string, error) {
-	if err := p.downloadConfig(ctx); err != nil {
+	if err := p.downloadConfig(); err != nil {
 		return nil, "", err
 	}
 	return p.fileProvider.Read(ctx)
