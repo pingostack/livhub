@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,8 +13,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"encoding/json"
 
 	"gopkg.in/yaml.v3"
 )
@@ -29,9 +28,11 @@ type RemoteConfigOptions struct {
 	PollInterval time.Duration
 	// MaxRetries is the maximum number of retries on failure
 	MaxRetries int
+	// Format is the format of the configuration file
+	Format string
 }
 
-// HTTPProvider implements ConfigProvider for HTTP/HTTPS URLs by downloading to local file
+// HTTPProvider implements ConfigProvider for HTTP URLs
 type HTTPProvider struct {
 	url          string
 	format       string
@@ -48,24 +49,32 @@ var DefaultRemoteConfigOptions = &RemoteConfigOptions{
 	MaxRetries:   maxRetries,
 }
 
-// NewHTTPProvider creates a new HTTP-based configuration provider
-func NewHTTPProvider(urlStr string, format string, options *RemoteConfigOptions) (*HTTPProvider, error) {
-	_, err := url.Parse(urlStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid URL %s: %w", urlStr, err)
-	}
-
+// NewHTTPProvider creates a new HTTP provider
+func NewHTTPProvider(urlStr string, options *RemoteConfigOptions) (*HTTPProvider, error) {
 	if options == nil {
 		options = DefaultRemoteConfigOptions
 	}
 
-	// Create temp directory for downloaded configs if it doesn't exist
+	// Parse URL and validate scheme
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid URL: %w", err)
+	}
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return nil, fmt.Errorf("unsupported URL scheme: %s", parsedURL.Scheme)
+	}
+
+	// Create temp directory if it doesn't exist
 	tempDir := filepath.Join(os.TempDir(), "plugo", "configs")
 	if err := os.MkdirAll(tempDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create temp directory: %w", err)
 	}
 
-	// Create a unique and safe filename using URL hash
+	// Generate a unique filename based on URL hash
+	format := options.Format
+	if format == "" {
+		format = "json"
+	}
 	hasher := sha256.New()
 	hasher.Write([]byte(urlStr))
 	fileName := fmt.Sprintf("%s.%s", hex.EncodeToString(hasher.Sum(nil))[:32], format)
@@ -77,7 +86,6 @@ func NewHTTPProvider(urlStr string, format string, options *RemoteConfigOptions)
 		return nil, fmt.Errorf("failed to create file provider: %w", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
 	provider := &HTTPProvider{
 		url:          urlStr,
 		format:       format,
@@ -85,19 +93,42 @@ func NewHTTPProvider(urlStr string, format string, options *RemoteConfigOptions)
 		httpClient:   &http.Client{Timeout: time.Second * 10},
 		options:      options,
 		fileProvider: fileProvider,
-		ctx:          ctx,
-		cancel:       cancel,
+	}
+
+	// Do initial download
+	if err := provider.downloadConfig(); err != nil {
+		return nil, fmt.Errorf("failed initial download: %w", err)
 	}
 
 	// Start polling if interval is set
 	if options.PollInterval > 0 {
+		ctx, cancel := context.WithCancel(context.Background())
+		provider.ctx = ctx
+		provider.cancel = cancel
 		go provider.startPolling()
 	}
 
 	return provider, nil
 }
 
-// startPolling starts a goroutine to periodically poll for config updates
+// String returns a string representation of the provider
+func (p *HTTPProvider) String() string {
+	return p.url
+}
+
+// LocalPath returns the path to the local configuration file
+func (p *HTTPProvider) LocalPath() string {
+	return p.localPath
+}
+
+// Close cleans up temporary files and stops polling
+func (p *HTTPProvider) Close() error {
+	if p.cancel != nil {
+		p.cancel()
+	}
+	return nil
+}
+
 func (p *HTTPProvider) startPolling() {
 	ticker := time.NewTicker(p.options.PollInterval)
 	defer ticker.Stop()
@@ -114,26 +145,7 @@ func (p *HTTPProvider) startPolling() {
 	}
 }
 
-// downloadConfig downloads the remote configuration to local file
 func (p *HTTPProvider) downloadConfig() error {
-	// Check if local file exists before attempting download
-	if _, err := os.Stat(p.localPath); err == nil {
-		// Local file exists, try download but fallback to existing file if fails
-		if err := p.tryDownload(); err != nil {
-			fmt.Printf("Warning: failed to download config from %s: %v, using existing file\n", p, err)
-			return nil
-		}
-	} else {
-		// No local file, must download successfully
-		if err := p.tryDownload(); err != nil {
-			return fmt.Errorf("failed to download config and no local file exists: %w", err)
-		}
-	}
-	return nil
-}
-
-// tryDownload attempts to download the remote config
-func (p *HTTPProvider) tryDownload() error {
 	// Get response body first
 	resp, err := p.httpClient.Get(p.url)
 	if err != nil {
@@ -161,33 +173,11 @@ func (p *HTTPProvider) tryDownload() error {
 	tmpFile := basePath + ".tmp" + filepath.Ext(p.localPath)
 	completeFile := basePath + ".complete" + filepath.Ext(p.localPath)
 
-	// Create temporary file
-	f, err := os.Create(tmpFile)
-	if err != nil {
-		return fmt.Errorf("failed to create temporary file: %w", err)
+	// Write to temporary file
+	if err = os.WriteFile(tmpFile, body, 0644); err != nil {
+		return fmt.Errorf("failed to write temporary file: %w", err)
 	}
-	defer func() {
-		f.Close()
-		// Clean up temp file in case of failure
-		if err != nil {
-			os.Remove(tmpFile)
-		}
-	}()
-
-	// Write the entire content at once
-	if _, err = f.Write(body); err != nil {
-		return fmt.Errorf("failed to write config to temporary file: %w", err)
-	}
-
-	// Ensure all data is written to disk
-	if err = f.Sync(); err != nil {
-		return fmt.Errorf("failed to sync temporary file: %w", err)
-	}
-
-	// Close the file before further operations
-	if err = f.Close(); err != nil {
-		return fmt.Errorf("failed to close temporary file: %w", err)
-	}
+	defer os.Remove(tmpFile) // Always clean up temp file
 
 	// Rename tmp to complete
 	if err = os.Rename(tmpFile, completeFile); err != nil {
@@ -232,7 +222,6 @@ func (p *HTTPProvider) tryDownload() error {
 	return nil
 }
 
-// isValidConfig checks if the config content is valid
 func (p *HTTPProvider) isValidConfig(content []byte) bool {
 	// For JSON format
 	if p.format == "json" {
@@ -246,30 +235,4 @@ func (p *HTTPProvider) isValidConfig(content []byte) bool {
 	}
 
 	return true // For other formats, assume valid
-}
-
-// Read downloads the remote config and delegates to FileProvider
-func (p *HTTPProvider) Read(ctx context.Context) (io.Reader, string, error) {
-	if err := p.downloadConfig(); err != nil {
-		return nil, "", err
-	}
-	return p.fileProvider.Read(ctx)
-}
-
-// String returns a string representation of the provider
-func (p *HTTPProvider) String() string {
-	return p.url
-}
-
-// Close cleans up temporary files and stops polling
-func (p *HTTPProvider) Close() error {
-	if p.cancel != nil {
-		p.cancel()
-	}
-	//return os.Remove(p.localPath)
-	return nil
-}
-
-func (p *HTTPProvider) LocalPath() string {
-	return p.localPath
 }

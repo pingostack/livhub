@@ -3,18 +3,16 @@ package plugo
 import (
 	"context"
 	"fmt"
-	"io"
 	"sync"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/pingostack/livhub/pkg/logger"
 	"github.com/spf13/viper"
 )
 
 // ConfigProvider defines the interface for configuration providers
 type ConfigProvider interface {
 	// Read returns the configuration content and format
-	Read(ctx context.Context) (io.Reader, string, error)
+	// Read(ctx context.Context) (io.Reader, string, error)
 	// String returns a string representation of the provider
 	String() string
 	// LocalPath returns the local path of the provider
@@ -49,33 +47,15 @@ func NewConfigLoader(ctx context.Context, onUpdate OnConfigUpdate) *ConfigLoader
 
 // readConfig reads configuration from the provider into viper and notifies manager
 func (l *ConfigLoader) readConfig() error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	reader, format, err := l.provider.Read(l.ctx)
-	if err != nil {
-		return fmt.Errorf("failed to read from provider: %w", err)
-	}
-	defer func() {
-		if closer, ok := reader.(io.Closer); ok {
-			closer.Close()
-		}
-	}()
-
-	if format != "" {
-		l.viper.SetConfigType(format)
-	}
-
-	// Read config using the reader
-	if err := l.viper.ReadConfig(reader); err != nil {
+	// Make sure we're reading the correct file
+	l.viper.SetConfigFile(l.provider.LocalPath())
+	if err := l.viper.ReadInConfig(); err != nil {
 		return fmt.Errorf("failed to read config: %w", err)
 	}
 
 	// Notify about the update with latest viper content
 	if l.onUpdate != nil {
-		if err := l.onUpdate(l.viper); err != nil {
-			return fmt.Errorf("failed to handle config update: %w", err)
-		}
+		l.onUpdate(l.viper)
 	}
 
 	return nil
@@ -88,45 +68,23 @@ func (l *ConfigLoader) SetProvider(provider ConfigProvider) error {
 
 	l.provider = provider
 
-	// Get the initial content
-	reader, format, err := provider.Read(l.ctx)
-	if err != nil {
-		return fmt.Errorf("failed to read from provider: %w", err)
-	}
-	defer func() {
-		if closer, ok := reader.(io.Closer); ok {
-			closer.Close()
-		}
-	}()
-
-	if format != "" {
-		l.viper.SetConfigType(format)
-	}
-
-	// Read config using the reader
-	if err := l.viper.ReadConfig(reader); err != nil {
-		return fmt.Errorf("failed to read config: %w", err)
-	}
-
 	// Set up file watching
 	l.viper.SetConfigFile(provider.LocalPath())
 	l.viper.WatchConfig()
 	l.viper.OnConfigChange(func(in fsnotify.Event) {
-		// Re-establish watch on the new file after rename
-		if in.Op&fsnotify.Create == fsnotify.Create {
-			l.viper.SetConfigFile(provider.LocalPath())
-			l.viper.WatchConfig()
-		}
-		if err := l.readConfig(); err != nil {
-			logger.WithError(err).Warnf("Failed to read config")
+		if l.onUpdate != nil {
+			l.onUpdate(l.viper)
 		}
 	})
 
-	// Notify about the update with latest viper content
+	// Do initial read
+	if err := l.viper.ReadInConfig(); err != nil {
+		return fmt.Errorf("failed to read config: %w", err)
+	}
+
+	// Notify about initial content
 	if l.onUpdate != nil {
-		if err := l.onUpdate(l.viper); err != nil {
-			return fmt.Errorf("failed to handle config update: %w", err)
-		}
+		l.onUpdate(l.viper)
 	}
 
 	return nil
