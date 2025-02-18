@@ -179,15 +179,11 @@ func (m *manager) exit() error {
 }
 
 func (m *manager) handleConfigUpdate(v *viper.Viper) error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	for _, p := range m.plugins {
-		if p.onConfigChange == nil {
+		if p.onConfigChange == nil || p.config.configKey == "" {
 			continue
 		}
 
-		// Create a new instance of the config type
 		newConfig := reflect.New(p.config.configType.Elem()).Interface()
 
 		// Set default values first
@@ -197,15 +193,31 @@ func (m *manager) handleConfigUpdate(v *viper.Viper) error {
 			}
 		}
 
+		// Check if the key exists in the current configuration
+		if !v.IsSet(p.config.configKey) {
+			continue // Skip if configuration key is not present
+		}
+
 		// Unmarshal current config values, overriding defaults
 		if err := v.UnmarshalKey(p.config.configKey, newConfig); err != nil {
 			return fmt.Errorf("failed to unmarshal config for key %s: %w", p.config.configKey, err)
+		}
+
+		// Compare with last config if it exists
+		if p.config.lastConfig != nil {
+			// Check if configs are equal
+			if reflect.DeepEqual(p.config.lastConfig, newConfig) {
+				continue // Skip if no changes
+			}
 		}
 
 		// Call the onChange handler
 		if err := p.onConfigChange(m.ctx, newConfig); err != nil {
 			return fmt.Errorf("failed to handle config change for plugin %s: %w", p.name, err)
 		}
+
+		// Store the new config as last config after successful update
+		p.config.lastConfig = newConfig
 	}
 
 	return nil

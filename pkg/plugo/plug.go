@@ -6,10 +6,11 @@ import (
 )
 
 type configInfo struct {
-	configKey    string
-	configType   reflect.Type
-	Value        interface{}
-	defaultValue interface{}
+	configKey     string
+	configType    reflect.Type
+	Value         interface{}
+	defaultValue  interface{}
+	lastConfig    interface{} // Store the last successfully applied configuration
 }
 
 type plugInfo struct {
