@@ -20,38 +20,41 @@ var (
 
 type registerOption func(m *manager, pi *plugInfo)
 
-func WithFeatureType(obj interface{}) registerOption {
+func WithCreate(create func() (interface{}, error)) registerOption {
 	return func(m *manager, pi *plugInfo) {
-		pi.featureType = reflect.TypeOf(obj)
+		obj, err := create()
+		if err != nil {
+			panic(err)
+		}
 		pi.obj = obj
 	}
 }
 
-func WithInit(init func(ctx context.Context) error) registerOption {
+func WithInit(init func(ctx context.Context, pl Plugin) error) registerOption {
 	return func(m *manager, pi *plugInfo) {
 		pi.init = init
 	}
 }
 
-func WithPre(pre func(ctx context.Context) error) registerOption {
+func WithPre(pre func(ctx context.Context, pl Plugin) error) registerOption {
 	return func(m *manager, pi *plugInfo) {
 		pi.pre = pre
 	}
 }
 
-func WithRun(run func(ctx context.Context) error) registerOption {
+func WithRun(run func(ctx context.Context, pl Plugin) error) registerOption {
 	return func(m *manager, pi *plugInfo) {
 		pi.run = run
 	}
 }
 
-func WithExit(exit func(ctx context.Context) error) registerOption {
+func WithExit(exit func(ctx context.Context, pl Plugin) error) registerOption {
 	return func(m *manager, pi *plugInfo) {
 		pi.exit = exit
 	}
 }
 
-func WithConfig(key string, defaultCfg interface{}, onChange func(ctx context.Context, cfg interface{}) error) registerOption {
+func WithConfig(key string, defaultCfg interface{}, onChange func(ctx context.Context, pl Plugin, cfg interface{}) error) registerOption {
 	return func(m *manager, pi *plugInfo) {
 		pi.config = configInfo{
 			configKey:    key,
@@ -62,6 +65,8 @@ func WithConfig(key string, defaultCfg interface{}, onChange func(ctx context.Co
 	}
 }
 
+type Feature interface{}
+
 type manager struct {
 	mu           sync.RWMutex
 	ctx          context.Context
@@ -70,14 +75,24 @@ type manager struct {
 	wg           sync.WaitGroup
 	configLoader *ConfigLoader
 	closeOnce    sync.Once
+	callbacks    []callbackInfo
+	features     map[reflect.Type]Feature
+}
+
+type callbackInfo struct {
+	fn         reflect.Value
+	paramTypes []reflect.Type
+	triggered  bool
 }
 
 func newManager(ctx context.Context) *manager {
 	ctx, cancel := context.WithCancel(ctx)
 	return &manager{
-		ctx:     ctx,
-		cancel:  cancel,
-		plugins: make([]*plugInfo, 0),
+		ctx:       ctx,
+		cancel:    cancel,
+		plugins:   make([]*plugInfo, 0),
+		callbacks: make([]callbackInfo, 0),
+		features:  make(map[reflect.Type]Feature),
 	}
 }
 
@@ -119,7 +134,7 @@ func (m *manager) init() error {
 
 	for _, p := range m.plugins {
 		if p.init != nil {
-			if err := p.init(m.ctx); err != nil {
+			if err := p.init(m.ctx, p.obj); err != nil {
 				return err
 			}
 		}
@@ -133,7 +148,7 @@ func (m *manager) pre() error {
 
 	for _, p := range m.plugins {
 		if p.pre != nil {
-			if err := p.pre(m.ctx); err != nil {
+			if err := p.pre(m.ctx, p.obj); err != nil {
 				return err
 			}
 		}
@@ -152,7 +167,7 @@ func (m *manager) run() error {
 			m.wg.Add(1)
 			go func(p *plugInfo) {
 				defer m.wg.Done()
-				chErr <- p.run(m.ctx)
+				chErr <- p.run(m.ctx, p.obj)
 			}(p)
 		}
 	}
@@ -172,10 +187,89 @@ func (m *manager) exit() error {
 
 	for _, p := range m.plugins {
 		if p.exit != nil {
-			p.exit(m.ctx)
+			p.exit(m.ctx, p.obj)
 		}
 	}
 	return nil
+}
+
+func (m *manager) requireFeatures(callback ...interface{}) error {
+	for _, cb := range callback {
+		fnValue := reflect.ValueOf(cb)
+		if fnValue.Kind() != reflect.Func {
+			return fmt.Errorf("expected function, got %T", cb)
+		}
+
+		fnType := fnValue.Type()
+		numParams := fnType.NumIn()
+		paramTypes := make([]reflect.Type, numParams)
+
+		for i := 0; i < numParams; i++ {
+			paramTypes[i] = fnType.In(i)
+		}
+
+		m.callbacks = append(m.callbacks, callbackInfo{
+			fn:         fnValue,
+			paramTypes: paramTypes,
+			triggered:  false,
+		})
+
+		m.tryTriggerCallback(len(m.callbacks) - 1)
+	}
+
+	return nil
+}
+
+func (m *manager) addFeature(feature Feature) {
+	featureType := reflect.TypeOf(feature)
+	m.features[featureType] = feature
+
+	for i := range m.callbacks {
+		if !m.callbacks[i].triggered {
+			m.tryTriggerCallback(i)
+		}
+	}
+}
+
+func (m *manager) tryTriggerCallback(index int) {
+	if index >= len(m.callbacks) || m.callbacks[index].triggered {
+		return
+	}
+
+	callback := m.callbacks[index]
+
+	params := make([]reflect.Value, len(callback.paramTypes))
+	allAvailable := true
+
+	for i, paramType := range callback.paramTypes {
+		feature, ok := m.features[paramType]
+		if !ok {
+			if paramType.Kind() == reflect.Interface {
+				found := false
+				for ft, f := range m.features {
+					if ft.Implements(paramType) {
+						params[i] = reflect.ValueOf(f)
+						found = true
+						break
+					}
+				}
+				if !found {
+					allAvailable = false
+					break
+				}
+			} else {
+				allAvailable = false
+				break
+			}
+		} else {
+			params[i] = reflect.ValueOf(feature)
+		}
+	}
+
+	if allAvailable {
+		m.callbacks[index].triggered = true
+		callback.fn.Call(params)
+	}
 }
 
 func (m *manager) handleConfigUpdate(v *viper.Viper) error {
@@ -212,7 +306,7 @@ func (m *manager) handleConfigUpdate(v *viper.Viper) error {
 		}
 
 		// Call the onChange handler
-		if err := p.onConfigChange(m.ctx, newConfig); err != nil {
+		if err := p.onConfigChange(m.ctx, p.obj, newConfig); err != nil {
 			return fmt.Errorf("failed to handle config change for plugin %s: %w", p.name, err)
 		}
 
@@ -281,4 +375,12 @@ func Close() error {
 
 func SetConfigProvider(provider ConfigProvider) error {
 	return defaultManager.configLoader.SetProvider(provider)
+}
+
+func RequireFeatures(ctx context.Context, callback ...interface{}) error {
+	return defaultManager.requireFeatures(callback...)
+}
+
+func AddFeature(feature Feature) {
+	defaultManager.addFeature(feature)
 }
