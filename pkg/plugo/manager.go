@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"reflect"
 	"sync"
+	"sync/atomic"
 
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/viper"
@@ -20,25 +22,22 @@ var (
 
 type registerOption func(m *manager, pi *plugInfo)
 
-func WithCreate(create func() (interface{}, error)) registerOption {
+var defaultManager *manager
+
+func init() {
+	defaultManager = newManager(context.Background())
+	defaultManager.configLoader = NewConfigLoader(defaultManager.ctx, defaultManager.handleConfigUpdate)
+}
+
+func WithCreate(create func(ctx context.Context) Plugin) registerOption {
 	return func(m *manager, pi *plugInfo) {
-		obj, err := create()
-		if err != nil {
-			panic(err)
-		}
-		pi.obj = obj
+		pi.create = create
 	}
 }
 
-func WithInit(init func(ctx context.Context, pl Plugin) error) registerOption {
+func WithSetup(setup func(ctx context.Context, pl Plugin) error) registerOption {
 	return func(m *manager, pi *plugInfo) {
-		pi.init = init
-	}
-}
-
-func WithPre(pre func(ctx context.Context, pl Plugin) error) registerOption {
-	return func(m *manager, pi *plugInfo) {
-		pi.pre = pre
+		pi.setup = setup
 	}
 }
 
@@ -65,18 +64,29 @@ func WithConfig(key string, defaultCfg interface{}, onChange func(ctx context.Co
 	}
 }
 
-type Feature interface{}
+// WithCritical marks a plugin as critical
+// When a critical plugin's run function abnormally exits, it will automatically trigger manager shutdown
+func WithCritical() registerOption {
+	return func(m *manager, pi *plugInfo) {
+		pi.critical = true
+	}
+}
+
+type Feature interface {
+	Type() interface{}
+}
 
 type manager struct {
-	mu           sync.RWMutex
-	ctx          context.Context
-	cancel       context.CancelFunc
-	plugins      []*plugInfo
-	wg           sync.WaitGroup
-	configLoader *ConfigLoader
-	closeOnce    sync.Once
-	callbacks    []callbackInfo
-	features     map[reflect.Type]Feature
+	mu                   sync.RWMutex
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	plugins              []*plugInfo
+	wg                   sync.WaitGroup
+	configLoader         *ConfigLoader
+	closeOnce            sync.Once
+	callbacks            []callbackInfo
+	features             map[reflect.Type]Feature
+	providerConstructors sync.Map
 }
 
 type callbackInfo struct {
@@ -128,55 +138,57 @@ func (m *manager) unregister(name string) {
 	}
 }
 
-func (m *manager) init() error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	for _, p := range m.plugins {
-		if p.init != nil {
-			if err := p.init(m.ctx, p.obj); err != nil {
-				return err
-			}
+func (m *manager) setupPlugin(p *plugInfo) error {
+	// Only call setup if not already set up
+	if p.setup != nil && atomic.CompareAndSwapInt32(&p.setupComplete, 0, 1) {
+		if err := p.setup(m.ctx, p.obj); err != nil {
+			// Reset flag on failure
+			atomic.StoreInt32(&p.setupComplete, 0)
+			return fmt.Errorf("failed to setup plugin %s: %w", p.name, err)
 		}
 	}
 	return nil
 }
 
-func (m *manager) pre() error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+func (m *manager) runPlugin(p *plugInfo) {
+	// Only start running if set up and not already running
+	if p.run != nil && p.setupComplete == 1 && atomic.CompareAndSwapInt32(&p.running, 0, 1) {
+		m.wg.Add(1)
+		go func(p *plugInfo) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("Error running plugin %s: %v\n", p.name, r)
+					// Only trigger manager shutdown if this is a critical plugin
+					if p.critical {
+						log.Printf("Critical plugin %s panicked, shutting down manager", p.name)
+						go m.close()
+					}
+				}
+				m.wg.Done()
+			}()
 
-	for _, p := range m.plugins {
-		if p.pre != nil {
-			if err := p.pre(m.ctx, p.obj); err != nil {
-				return err
+			if err := p.run(m.ctx, p.obj); err != nil {
+				// Log the error
+				log.Printf("Error running plugin %s: %v\n", p.name, err)
+				// Only trigger manager shutdown if this is a critical plugin
+				if p.critical {
+					log.Printf("Critical plugin %s failed, shutting down manager", p.name)
+					go m.close()
+				}
 			}
-		}
+		}(p)
 	}
-	return nil
 }
 
-func (m *manager) run() error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	chErr := make(chan error, len(m.plugins))
-
-	for _, p := range m.plugins {
-		if p.run != nil {
-			m.wg.Add(1)
-			go func(p *plugInfo) {
-				defer m.wg.Done()
-				chErr <- p.run(m.ctx, p.obj)
-			}(p)
-		}
+// Initialize a newly created plugin and move it through its lifecycle
+func (m *manager) startupPlugin(p *plugInfo) error {
+	// First setup the plugin
+	if err := m.setupPlugin(p); err != nil {
+		return err
 	}
 
-	for i := 0; i < len(m.plugins); i++ {
-		if err := <-chErr; err != nil {
-			return err
-		}
-	}
+	// Then run it
+	m.runPlugin(p)
 
 	return nil
 }
@@ -221,7 +233,7 @@ func (m *manager) requireFeatures(callback ...interface{}) error {
 }
 
 func (m *manager) addFeature(feature Feature) {
-	featureType := reflect.TypeOf(feature)
+	featureType := reflect.TypeOf(feature.Type())
 	m.features[featureType] = feature
 
 	for i := range m.callbacks {
@@ -289,6 +301,7 @@ func (m *manager) handleConfigUpdate(v *viper.Viper) error {
 
 		// Check if the key exists in the current configuration
 		if !v.IsSet(p.config.configKey) {
+			log.Printf("Configuration key %s not present, skipping\n", p.config.configKey)
 			continue // Skip if configuration key is not present
 		}
 
@@ -305,9 +318,20 @@ func (m *manager) handleConfigUpdate(v *viper.Viper) error {
 			}
 		}
 
-		// Call the onChange handler
+		isFirstConfigLoad := atomic.CompareAndSwapInt32(&p.configLoaded, 0, 1)
+
+		if p.create != nil && p.obj == nil {
+			p.obj = p.create(m.ctx)
+		}
+
 		if err := p.onConfigChange(m.ctx, p.obj, newConfig); err != nil {
 			return fmt.Errorf("failed to handle config change for plugin %s: %w", p.name, err)
+		}
+
+		if isFirstConfigLoad && p.obj != nil {
+			if err := m.startupPlugin(p); err != nil {
+				return err
+			}
 		}
 
 		// Store the new config as last config after successful update
@@ -328,13 +352,6 @@ func (m *manager) close() error {
 	return nil
 }
 
-var defaultManager *manager
-
-func init() {
-	defaultManager = newManager(context.Background())
-	defaultManager.configLoader = NewConfigLoader(defaultManager.ctx, defaultManager.handleConfigUpdate)
-}
-
 func RegisterPlugin(name string, options ...registerOption) error {
 	return defaultManager.register(name, options...)
 }
@@ -344,27 +361,9 @@ func UnregisterPlugin(name string) {
 }
 
 func Start() error {
-	err := defaultManager.init()
-	if err != nil {
+	if err := defaultManager.configLoader.Start(); err != nil {
 		return err
 	}
-
-	if err := defaultManager.pre(); err != nil {
-		return err
-	}
-
-	go func() {
-		var err error
-		defer func() {
-			if err != nil {
-				defaultManager.close()
-			}
-		}()
-
-		if err = defaultManager.run(); err != nil {
-			return
-		}
-	}()
 
 	return nil
 }

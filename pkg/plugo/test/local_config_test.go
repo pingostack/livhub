@@ -34,8 +34,7 @@ test:
 	// Register plugin with config
 	var configUpdated atomic.Bool
 	err = plugo.RegisterPlugin("test",
-		plugo.WithFeatureType(plugin),
-		plugo.WithConfig("test", &TestConfig{}, func(ctx context.Context, cfg interface{}) error {
+		plugo.WithConfig("test", &TestConfig{}, func(ctx context.Context, pl plugo.Plugin, cfg interface{}) error {
 			if c, ok := cfg.(*TestConfig); ok {
 				plugin.config = c
 				configUpdated.Store(true)
@@ -55,6 +54,7 @@ test:
 	err = plugo.SetConfigProvider(provider)
 	assert.NoError(t, err, "Setting config provider should succeed")
 
+	plugo.Start()
 	// Verify initial config
 	assert.Eventually(t, configUpdated.Load, time.Second, 10*time.Millisecond, "Config should be loaded")
 	assert.Equal(t, "test-plugin", plugin.config.Name, "Initial config name should match")

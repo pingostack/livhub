@@ -17,6 +17,8 @@ type ConfigProvider interface {
 	String() string
 	// LocalPath returns the local path of the provider
 	LocalPath() string
+	Start() error
+	Close() error
 }
 
 // OnConfigUpdate is called when configuration content is updated
@@ -52,8 +54,30 @@ func (l *ConfigLoader) SetProvider(provider ConfigProvider) error {
 
 	l.provider = provider
 
+	return nil
+}
+
+// GetViper returns the viper instance
+func (l *ConfigLoader) GetViper() *viper.Viper {
+	return l.viper
+}
+
+// Close stops the configuration loader and watcher
+func (l *ConfigLoader) Close() {
+	l.cancel()
+	if l.provider != nil {
+		_ = l.provider.Close()
+	}
+}
+
+func (l *ConfigLoader) Start() error {
+	if l.provider != nil {
+		if err := l.provider.Start(); err != nil {
+			return err
+		}
+	}
 	// Set up file watching
-	l.viper.SetConfigFile(provider.LocalPath())
+	l.viper.SetConfigFile(l.provider.LocalPath())
 	l.viper.WatchConfig()
 	l.viper.OnConfigChange(func(in fsnotify.Event) {
 		if l.onUpdate != nil {
@@ -72,14 +96,4 @@ func (l *ConfigLoader) SetProvider(provider ConfigProvider) error {
 	}
 
 	return nil
-}
-
-// GetViper returns the viper instance
-func (l *ConfigLoader) GetViper() *viper.Viper {
-	return l.viper
-}
-
-// Stop stops the configuration loader and watcher
-func (l *ConfigLoader) Stop() {
-	l.cancel()
 }

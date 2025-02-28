@@ -64,21 +64,21 @@ var (
 
 func init() {
 	err := plugo.RegisterPlugin("whip",
-		plugo.WithConfig("whip", defaultConfig, func(ctx context.Context, cfg interface{}) error {
+		plugo.WithConfig("whip", defaultConfig, func(ctx context.Context, obj plugo.Plugin, cfg interface{}) error {
 			if config, ok := cfg.(*Config); ok {
 				globalServer = NewServer(config)
 				return nil
 			}
 			return fmt.Errorf("invalid config type: %T", cfg)
 		}),
-		plugo.WithInit(func(ctx context.Context) error {
+		plugo.WithSetup(func(ctx context.Context, obj plugo.Plugin) error {
 			if globalServer == nil {
 				return nil
 			}
 			globalServer.setupRoutes()
 			return nil
 		}),
-		plugo.WithRun(func(ctx context.Context) error {
+		plugo.WithRun(func(ctx context.Context, obj plugo.Plugin) error {
 			if globalServer == nil {
 				return fmt.Errorf("server not initialized")
 			}
@@ -103,7 +103,7 @@ func init() {
 				return fmt.Errorf("http server error: %v", err)
 			}
 		}),
-		plugo.WithExit(func(ctx context.Context) error {
+		plugo.WithExit(func(ctx context.Context, obj plugo.Plugin) error {
 			if globalServer == nil {
 				return nil
 			}
@@ -187,8 +187,8 @@ func (s *Server) handleWhipPublish(c *gin.Context) {
 
 	// Create peer config
 	config := gortc.PeerConfig{
-		RTCConfig:   s.webrtcConfig,
-		TrickleICE:  true,
+		WebRTC: s.webrtcConfig,
+		//TrickleICE:  true,
 		IsPublisher: true,
 	}
 
@@ -295,8 +295,8 @@ func (s *Server) handleWhepSubscribe(c *gin.Context) {
 
 	// Create peer config
 	config := gortc.PeerConfig{
-		RTCConfig:   s.webrtcConfig,
-		TrickleICE:  true,
+		WebRTC: s.webrtcConfig,
+		//TrickleICE:  true,
 		IsPublisher: false,
 	}
 

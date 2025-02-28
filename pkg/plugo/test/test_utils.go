@@ -7,11 +7,14 @@ import (
 
 // TestPlugin represents a test plugin with lifecycle tracking
 type TestPlugin struct {
-	initCalled atomic.Bool
-	preCalled  atomic.Bool
-	runCalled  atomic.Bool
-	exitCalled atomic.Bool
-	config     *TestConfig
+	setupCalled atomic.Bool
+	runCalled   atomic.Bool
+	exitCalled  atomic.Bool
+	config      *TestConfig
+}
+
+func (p *TestPlugin) Type() interface{} {
+	return &TestPlugin{}
 }
 
 // TestConfig represents test configuration
