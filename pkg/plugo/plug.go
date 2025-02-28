@@ -16,12 +16,17 @@ type configInfo struct {
 }
 
 type plugInfo struct {
-	name string
-	obj  Plugin
-	init func(ctx context.Context, pl Plugin) error
-	pre  func(ctx context.Context, pl Plugin) error
-	run  func(ctx context.Context, pl Plugin) error
-	exit func(ctx context.Context, pl Plugin) error
+	name     string
+	obj      Plugin
+	create   func(ctx context.Context) Plugin
+	setup    func(ctx context.Context, pl Plugin) error
+	run      func(ctx context.Context, pl Plugin) error
+	exit     func(ctx context.Context, pl Plugin) error
+	critical bool // Flag to mark if the plugin is critical for the system
+
+	setupComplete int32
+	running       int32
+	configLoaded  int32
 
 	onConfigChange func(ctx context.Context, pl Plugin, cfg interface{}) error
 	config         configInfo

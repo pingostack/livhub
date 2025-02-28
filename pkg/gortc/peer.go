@@ -254,6 +254,11 @@ func (p *Peer) OnICECandidate() <-chan *webrtc.ICECandidate {
 	return p.onICECandidate
 }
 
+// ID returns the peer's unique identifier
+func (p *Peer) ID() string {
+	return p.id
+}
+
 // AddICECandidate adds a remote ICE candidate
 func (p *Peer) AddICECandidate(candidate webrtc.ICECandidateInit) error {
 	if err := p.conn.AddICECandidate(candidate); err != nil {

@@ -15,16 +15,24 @@ type testConfig struct {
 	Version int
 }
 
-// 定义测试用的特性类型
+// Define test feature types
 type TestFeatureA struct {
 	Value string
+}
+
+func (f TestFeatureA) Type() interface{} {
+	return TestFeatureA{}
 }
 
 type TestFeatureB struct {
 	Value int
 }
 
-// 定义一个接口和实现该接口的结构体，用于测试接口匹配
+func (f TestFeatureB) Type() interface{} {
+	return TestFeatureB{}
+}
+
+// Define an interface and a struct implementing it for interface matching tests
 type FeatureInterface interface {
 	GetName() string
 }
@@ -37,7 +45,11 @@ func (f FeatureImpl) GetName() string {
 	return f.Name
 }
 
-// 测试回调需要的内嵌结构
+func (f FeatureImpl) Type() interface{} {
+	return FeatureImpl{}
+}
+
+// Embedded structure needed for callback testing
 type callbackResult struct {
 	called   bool
 	mu       sync.Mutex
@@ -58,7 +70,7 @@ func (r *callbackResult) wasCalled() bool {
 }
 
 func TestWithConfig(t *testing.T) {
-	// 创建临时配置文件
+	// Create temporary config file
 	dir := t.TempDir()
 	configFile := filepath.Join(dir, "config.yaml")
 	err := os.WriteFile(configFile, []byte(`
@@ -69,27 +81,27 @@ test.config:
 		t.Fatal(err)
 	}
 
-	// 创建一个测试用的默认配置
+	// Create a test default config
 	defaultCfg := &testConfig{
 		Name:    "test",
 		Version: 1,
 	}
 
 	var receivedCfg interface{}
-	// 创建一个测试用的onChange函数来捕获配置
+	// Create a test onChange function to capture config
 	onChange := func(ctx context.Context, obj Plugin, cfg interface{}) error {
 		receivedCfg = cfg
 		return nil
 	}
 
-	// 注册插件
+	// Register plugin
 	err = RegisterPlugin("test-plugin", WithConfig("test.config", defaultCfg, onChange))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer UnregisterPlugin("test-plugin")
 
-	// 设置配置提供者
+	// Set config provider
 	err = SetConfigProvider(&FileProvider{
 		path:   configFile,
 		format: "yaml",
@@ -98,10 +110,10 @@ test.config:
 		t.Fatal(err)
 	}
 
-	// 等待一小段时间确保配置加载完成
+	// Wait a short time to ensure config is loaded
 	time.Sleep(100 * time.Millisecond)
 
-	// 验证接收到的配置
+	// Verify received config
 	received, ok := receivedCfg.(*testConfig)
 	if !ok {
 		t.Fatalf("expected receivedCfg to be *testConfig, got %T", receivedCfg)
@@ -118,13 +130,13 @@ test.config:
 }
 
 func TestBasicFeatureRequirements(t *testing.T) {
-	// 创建一个新的管理器以避免使用全局状态
+	// Create a new manager to avoid using global state
 	mgr := newManager(context.Background())
 
-	// 测试结果
+	// Test result
 	result := &callbackResult{}
 
-	// 注册需要两个特性的回调
+	// Register callback requiring two features
 	err := mgr.requireFeatures(func(a TestFeatureA, b TestFeatureB) {
 		result.markCalled(a, b)
 	})
@@ -133,17 +145,17 @@ func TestBasicFeatureRequirements(t *testing.T) {
 		t.Fatalf("requireFeatures returned error: %v", err)
 	}
 
-	// 添加第一个特性，回调不应该触发
+	// Add first feature, callback should not trigger
 	mgr.addFeature(TestFeatureA{Value: "test"})
 
 	if result.wasCalled() {
 		t.Fatal("Callback was triggered too early")
 	}
 
-	// 添加第二个特性，回调应该触发
+	// Add second feature, callback should trigger
 	mgr.addFeature(TestFeatureB{Value: 42})
 
-	// 给回调一些时间执行
+	// Give callback some time to execute
 	time.Sleep(50 * time.Millisecond)
 
 	if !result.wasCalled() {
@@ -152,13 +164,13 @@ func TestBasicFeatureRequirements(t *testing.T) {
 }
 
 func TestInterfaceMatching(t *testing.T) {
-	// 创建一个新的管理器
+	// Create a new manager
 	mgr := newManager(context.Background())
 
-	// 测试结果
+	// Test result
 	result := &callbackResult{}
 
-	// 注册需要接口的回调
+	// Register callback requiring interface
 	err := mgr.requireFeatures(func(f FeatureInterface) {
 		result.markCalled(f)
 	})
@@ -167,10 +179,10 @@ func TestInterfaceMatching(t *testing.T) {
 		t.Fatalf("requireFeatures returned error: %v", err)
 	}
 
-	// 添加实现该接口的特性
+	// Add feature implementing the interface
 	mgr.addFeature(FeatureImpl{Name: "test-interface"})
 
-	// 给回调一些时间执行
+	// Give callback some time to execute
 	time.Sleep(50 * time.Millisecond)
 
 	if !result.wasCalled() {
@@ -179,17 +191,17 @@ func TestInterfaceMatching(t *testing.T) {
 }
 
 func TestNestedFeatureAddition(t *testing.T) {
-	// 创建一个新的管理器
+	// Create a new manager
 	mgr := newManager(context.Background())
 
-	// 测试多级回调
+	// Test multi-level callbacks
 	firstResult := &callbackResult{}
 	secondResult := &callbackResult{}
 
-	// 回调1: 需要特性A，添加特性C
+	// Callback 1: Requires feature A, adds feature C
 	err := mgr.requireFeatures(func(a TestFeatureA) {
 		firstResult.markCalled(a)
-		// 在回调中添加新特性
+		// Add new feature in callback
 		mgr.addFeature(TestFeatureC{Value: "from-callback"})
 	})
 
@@ -197,7 +209,7 @@ func TestNestedFeatureAddition(t *testing.T) {
 		t.Fatalf("First requireFeatures returned error: %v", err)
 	}
 
-	// 回调2: 需要特性C
+	// Callback 2: Requires feature C
 	err = mgr.requireFeatures(func(c TestFeatureC) {
 		secondResult.markCalled(c)
 	})
@@ -206,13 +218,13 @@ func TestNestedFeatureAddition(t *testing.T) {
 		t.Fatalf("Second requireFeatures returned error: %v", err)
 	}
 
-	// 添加触发第一个回调的特性
+	// Add feature that triggers first callback
 	mgr.addFeature(TestFeatureA{Value: "test"})
 
-	// 给回调链一些时间执行
+	// Give callback chain some time to execute
 	time.Sleep(100 * time.Millisecond)
 
-	// 验证两个回调是否都被触发
+	// Verify both callbacks were triggered
 	if !firstResult.wasCalled() {
 		t.Fatal("First callback was not triggered")
 	}
@@ -223,14 +235,14 @@ func TestNestedFeatureAddition(t *testing.T) {
 }
 
 func TestCallbackTriggeredOnlyOnce(t *testing.T) {
-	// 创建一个新的管理器
+	// Create a new manager
 	mgr := newManager(context.Background())
 
-	// 计数器
+	// Counter
 	counter := 0
 	var mu sync.Mutex
 
-	// 注册回调
+	// Register callback
 	err := mgr.requireFeatures(func(a TestFeatureA) {
 		mu.Lock()
 		counter++
@@ -241,13 +253,13 @@ func TestCallbackTriggeredOnlyOnce(t *testing.T) {
 		t.Fatalf("requireFeatures returned error: %v", err)
 	}
 
-	// 添加特性
+	// Add feature
 	mgr.addFeature(TestFeatureA{Value: "test"})
 
-	// 再次添加相同特性
+	// Add same feature again
 	mgr.addFeature(TestFeatureA{Value: "another"})
 
-	// 给回调一些时间执行
+	// Give callback some time to execute
 	time.Sleep(50 * time.Millisecond)
 
 	mu.Lock()
@@ -259,7 +271,11 @@ func TestCallbackTriggeredOnlyOnce(t *testing.T) {
 	}
 }
 
-// 为嵌套特性测试定义的额外类型
+// Additional type defined for nested feature tests
 type TestFeatureC struct {
 	Value string
+}
+
+func (f TestFeatureC) Type() interface{} {
+	return TestFeatureC{}
 }

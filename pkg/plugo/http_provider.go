@@ -31,6 +31,8 @@ type RemoteConfigOptions struct {
 	MaxRetries int
 	// Format is the format of the configuration file
 	Format string
+	// TmpDir is the temporary directory for downloading files
+	TempDir string
 }
 
 // HTTPProvider implements ConfigProvider for HTTP URLs
@@ -51,7 +53,7 @@ var DefaultRemoteConfigOptions = &RemoteConfigOptions{
 }
 
 // NewHTTPProvider creates a new HTTP provider
-func NewHTTPProvider(urlStr string, options *RemoteConfigOptions) (*HTTPProvider, error) {
+func NewHTTPProvider(ctx context.Context, urlStr string, options *RemoteConfigOptions) (*HTTPProvider, error) {
 	if options == nil {
 		options = DefaultRemoteConfigOptions
 	}
@@ -66,7 +68,10 @@ func NewHTTPProvider(urlStr string, options *RemoteConfigOptions) (*HTTPProvider
 	}
 
 	// Create temp directory if it doesn't exist
-	tempDir := filepath.Join(os.TempDir(), "plugo", "configs")
+	if options.TempDir == "" {
+		options.TempDir = filepath.Join(os.TempDir(), "plugo", "configs")
+	}
+	tempDir := options.TempDir
 	if err := os.MkdirAll(tempDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create temp directory: %w", err)
 	}
@@ -96,20 +101,33 @@ func NewHTTPProvider(urlStr string, options *RemoteConfigOptions) (*HTTPProvider
 		fileProvider: fileProvider,
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
+	provider.ctx = ctx
+	provider.cancel = cancel
+
+	return provider, nil
+}
+
+func (p *HTTPProvider) Start() error {
+
 	// Do initial download
-	if err := provider.downloadConfig(); err != nil {
-		return nil, fmt.Errorf("failed initial download: %w", err)
+	if err := p.downloadConfig(); err != nil {
+		return fmt.Errorf("failed initial download: %w", err)
 	}
 
 	// Start polling if interval is set
-	if options.PollInterval > 0 {
-		ctx, cancel := context.WithCancel(context.Background())
-		provider.ctx = ctx
-		provider.cancel = cancel
-		go provider.startPolling()
+	if p.options.PollInterval > 0 {
+		go p.startPolling()
 	}
 
-	return provider, nil
+	return nil
+}
+
+func (p *HTTPProvider) Close() error {
+	if p.cancel != nil {
+		p.cancel()
+	}
+	return nil
 }
 
 // String returns a string representation of the provider
@@ -120,14 +138,6 @@ func (p *HTTPProvider) String() string {
 // LocalPath returns the path to the local configuration file
 func (p *HTTPProvider) LocalPath() string {
 	return p.localPath
-}
-
-// Close cleans up temporary files and stops polling
-func (p *HTTPProvider) Close() error {
-	if p.cancel != nil {
-		p.cancel()
-	}
-	return nil
 }
 
 func (p *HTTPProvider) startPolling() {

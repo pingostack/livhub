@@ -1,12 +1,7 @@
 package plugo
 
 import (
-	"bytes"
-	"context"
 	"fmt"
-	"io"
-	"log"
-	"os"
 	"path/filepath"
 )
 
@@ -35,26 +30,6 @@ func NewFileProvider(path string) (*FileProvider, error) {
 	}, nil
 }
 
-// Read reads the configuration from the file
-func (p *FileProvider) Read(ctx context.Context) (io.Reader, string, error) {
-	f, err := os.Open(p.path)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to open file: %w", err)
-	}
-
-	// Read the entire file into memory
-	content, err := io.ReadAll(f)
-	f.Close() // Close immediately after reading
-
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to read file: %w", err)
-	}
-
-	log.Printf("Read file %s, content %s", p.path, string(content))
-
-	return bytes.NewReader(content), p.format, nil
-}
-
 // String returns a string representation of the provider
 func (p *FileProvider) String() string {
 	return fmt.Sprintf("file://%s", p.path)
@@ -62,4 +37,12 @@ func (p *FileProvider) String() string {
 
 func (p *FileProvider) LocalPath() string {
 	return p.path
+}
+
+func (p *FileProvider) Start() error {
+	return nil
+}
+
+func (p *FileProvider) Close() error {
+	return nil
 }
