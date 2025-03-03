@@ -328,7 +328,7 @@ func (m *manager) handleConfigUpdate(v *viper.Viper) error {
 			return fmt.Errorf("failed to handle config change for plugin %s: %w", p.name, err)
 		}
 
-		if isFirstConfigLoad && p.obj != nil {
+		if isFirstConfigLoad {
 			if err := m.startupPlugin(p); err != nil {
 				return err
 			}
