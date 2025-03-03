@@ -140,7 +140,7 @@ func (m *manager) unregister(name string) {
 
 func (m *manager) setupPlugin(p *plugInfo) error {
 	// Only call setup if not already set up
-	if p.setup != nil && atomic.CompareAndSwapInt32(&p.setupComplete, 0, 1) {
+	if atomic.CompareAndSwapInt32(&p.setupComplete, 0, 1) && p.setup != nil {
 		if err := p.setup(m.ctx, p.obj); err != nil {
 			// Reset flag on failure
 			atomic.StoreInt32(&p.setupComplete, 0)
