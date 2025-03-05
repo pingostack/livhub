@@ -170,7 +170,7 @@ func (m *pluginManager) runPlugin(p *plugInfo) {
 					// Only trigger pluginManager shutdown if this is a critical plugin
 					if p.critical {
 						log.Printf("Critical plugin %s panicked, shutting down pluginManager", p.name)
-						go m.close()
+						go m.Close()
 					}
 				}
 				m.wg.Done()
@@ -182,7 +182,7 @@ func (m *pluginManager) runPlugin(p *plugInfo) {
 				// Only trigger pluginManager shutdown if this is a critical plugin
 				if p.critical {
 					log.Printf("Critical plugin %s failed, shutting down pluginManager", p.name)
-					go m.close()
+					go m.Close()
 				}
 			}
 		}(p)
