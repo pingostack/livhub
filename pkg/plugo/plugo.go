@@ -62,3 +62,11 @@ func RequireFeatures(callback interface{}) error {
 func AddFeature(feature Feature) {
 	defaultFeatureManager.AddFeature(feature)
 }
+
+func UpdateFeature(feature Feature) {
+	defaultFeatureManager.UpdateFeature(feature)
+}
+
+func RemoveFeature(featureType interface{}) {
+	defaultFeatureManager.RemoveFeature(featureType)
+}
