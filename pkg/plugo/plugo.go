@@ -70,3 +70,7 @@ func UpdateFeature(feature Feature) {
 func RemoveFeature(featureType interface{}) {
 	defaultFeatureManager.RemoveFeature(featureType)
 }
+
+func GetFeature(featureType interface{}) Feature {
+	return defaultFeatureManager.GetFeature(featureType)
+}
