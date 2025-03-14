@@ -112,6 +112,11 @@ func newManager(ctx context.Context) *pluginManager {
 
 	m.configLoader = NewConfigLoader(ctx, m.handleConfigUpdate)
 
+	go func() {
+		<-ctx.Done()
+		m.exit()
+	}()
+
 	return m
 }
 
@@ -165,14 +170,14 @@ func (m *pluginManager) runPlugin(p *plugInfo) {
 		m.wg.Add(1)
 		go func(p *plugInfo) {
 			defer func() {
-				if r := recover(); r != nil {
-					log.Printf("Error running plugin %s: %v\n", p.name, r)
-					// Only trigger pluginManager shutdown if this is a critical plugin
-					if p.critical {
-						log.Printf("Critical plugin %s panicked, shutting down pluginManager", p.name)
-						go m.Close()
-					}
-				}
+				// if r := recover(); r != nil {
+				// 	log.Printf("Error running plugin %s: %v\n", p.name, r)
+				// 	// Only trigger pluginManager shutdown if this is a critical plugin
+				// 	if p.critical {
+				// 		log.Printf("Critical plugin %s panicked, shutting down pluginManager", p.name)
+				// 		go m.Close()
+				// 	}
+				// }
 				m.wg.Done()
 			}()
 
@@ -278,10 +283,11 @@ func (m *pluginManager) Start() error {
 func (m *pluginManager) Close() error {
 	m.closeOnce.Do(func() {
 		m.cancel()
-		m.wg.Wait()
-		if err := m.exit(); err != nil {
-			return
-		}
 	})
 	return nil
+}
+
+func (m *pluginManager) Wait() {
+	m.wg.Wait()
+	<-m.ctx.Done()
 }
