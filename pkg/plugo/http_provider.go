@@ -12,7 +12,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -186,55 +185,23 @@ func (p *HTTPProvider) downloadConfig() error {
 		return nil
 	}
 
-	// Generate file paths
-	basePath := strings.TrimSuffix(p.localPath, filepath.Ext(p.localPath))
-	tmpFile := basePath + ".tmp" + filepath.Ext(p.localPath)
-	completeFile := basePath + ".complete" + filepath.Ext(p.localPath)
+	// Generate temporary file path
+	tmpFile := p.localPath + ".tmp"
 
 	// Write to temporary file
 	if err = os.WriteFile(tmpFile, body, 0644); err != nil {
 		return fmt.Errorf("failed to write temporary file: %w", err)
 	}
-	defer os.Remove(tmpFile) // Always clean up temp file
-
-	// Rename tmp to complete
-	if err = os.Rename(tmpFile, completeFile); err != nil {
-		return fmt.Errorf("failed to rename tmp to complete: %w", err)
-	}
-
-	// Check if symlink needs to be created or updated
-	needNewSymlink := false
-	if link, err := os.Readlink(p.localPath); err != nil {
-		if os.IsNotExist(err) {
-			// Symlink doesn't exist
-			needNewSymlink = true
-		} else {
-			return fmt.Errorf("failed to read symlink: %w", err)
+	defer func() {
+		// Clean up temp file in case of error
+		if _, err := os.Stat(tmpFile); err == nil {
+			os.Remove(tmpFile)
 		}
-	} else if link != filepath.Base(completeFile) {
-		// Symlink exists but points to a different file
-		needNewSymlink = true
-		os.Remove(p.localPath)
-	}
+	}()
 
-	// Create new symlink if needed
-	if needNewSymlink {
-		if err = os.Symlink(filepath.Base(completeFile), p.localPath); err != nil {
-			// If symlink fails, clean up the complete file
-			os.Remove(completeFile)
-			return fmt.Errorf("failed to create symlink: %w", err)
-		}
-	}
-
-	// Clean up old complete files
-	pattern := basePath + ".complete*"
-	oldFiles, _ := filepath.Glob(pattern)
-	for _, f := range oldFiles {
-		// Skip the current complete file
-		if f == completeFile {
-			continue
-		}
-		os.Remove(f)
+	// Rename temp file to target file
+	if err = os.Rename(tmpFile, p.localPath); err != nil {
+		return fmt.Errorf("failed to rename temporary file to target file: %w", err)
 	}
 
 	return nil
