@@ -74,3 +74,7 @@ func RemoveFeature(featureType interface{}) {
 func GetFeature(featureType interface{}) Feature {
 	return defaultFeatureManager.GetFeature(featureType)
 }
+
+func Done() <-chan struct{} {
+	return defaultPluginManager.ctx.Done()
+}
